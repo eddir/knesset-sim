@@ -206,7 +206,7 @@ export const parties: Party[] = [
     name: 'Оцма Йехудит',
     he: 'עוצמה יהודית',
     leader: 'Итамар Бен-Гвир',
-    color: '#171717',
+    color: 'var(--party-otzma)',
     bloc: 'netanyahu',
     poll: 8,
     lr: 9.7,

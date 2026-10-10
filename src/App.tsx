@@ -10,7 +10,8 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Compass } from '@/components/Compass'
-import { groupsFrom, Hemicycle, StackedBar } from '@/components/Hemicycle'
+import { Hemicycle, StackedBar } from '@/components/Hemicycle'
+import { groupsFrom } from '@/hemicycle'
 import {
   blocs,
   MAJORITY,
@@ -40,6 +41,8 @@ const choices = [
   { value: 0.5, key: '4', name: 'Скорее второй' },
   { value: 1, key: '5', name: 'Второй' },
 ]
+const choiceValues = new Set(choices.map((choice) => choice.value))
+const weightValues = new Set<number>(weightLevels.map((level) => level.id))
 
 function loadSave(): Save {
   const empty: Save = { phase: 'intro', weights: defaultWeights(), answers: {}, index: 0 }
@@ -48,11 +51,27 @@ function loadSave(): Save {
     if (!raw) return empty
     const data = JSON.parse(raw) as Partial<Save>
     const phase: Phase = data.phase === 'weights' || data.phase === 'questions' || data.phase === 'results' ? data.phase : 'intro'
+    const weights = defaultWeights()
+    if (data.weights && typeof data.weights === 'object') {
+      for (const theme of themes) {
+        const level = data.weights[theme.id]
+        if (typeof level === 'number' && weightValues.has(level)) weights[theme.id] = level
+      }
+    }
+    const answers: Answers = {}
+    if (data.answers && typeof data.answers === 'object') {
+      for (const question of questions) {
+        const value = (data.answers as Record<string, unknown>)[question.id]
+        if (value === null) answers[question.id] = null
+        else if (typeof value === 'number' && choiceValues.has(value)) answers[question.id] = value
+      }
+    }
+    const index = Number.isFinite(data.index) ? Math.round(data.index ?? 0) : 0
     return {
       phase,
-      weights: { ...defaultWeights(), ...(data.weights ?? {}) },
-      answers: data.answers && typeof data.answers === 'object' ? data.answers : {},
-      index: Math.max(0, Math.min(questions.length - 1, Math.round(data.index ?? 0))),
+      weights,
+      answers,
+      index: Math.max(0, Math.min(questions.length - 1, index)),
     }
   } catch {
     return empty
@@ -77,10 +96,13 @@ export default function App() {
   const [answers, setAnswers] = useState<Answers>(initial.answers)
   const [index, setIndex] = useState(initial.index)
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const theme = useTheme()
   const headingRef = useRef<HTMLHeadingElement>(null)
   const timer = useRef<number>(0)
+  const result = useMemo(() => simulate(answers, weights), [answers, weights])
+  const shareKey = parties.map((party) => result.seats[party.id]).join('.')
+  const copied = copiedKey === shareKey
 
   useEffect(() => {
     const save: Save = { phase, weights, answers, index }
@@ -90,14 +112,21 @@ export default function App() {
   useEffect(() => () => window.clearTimeout(timer.current), [])
 
   useEffect(() => {
+    if (!copied) return
+    const id = window.setTimeout(() => setCopiedKey(null), 2200)
+    return () => window.clearTimeout(id)
+  }, [copied])
+
+  useEffect(() => {
     if (phase === 'questions') headingRef.current?.focus()
     window.scrollTo(0, 0)
   }, [phase, index])
 
-  const result = useMemo(() => simulate(answers, weights), [answers, weights])
   const answered = questions.filter((question) => question.id in answers).length
 
   function go(next: Phase) {
+    window.clearTimeout(timer.current)
+    if (next !== 'results') setActiveId(null)
     setPhase(next)
   }
 
@@ -109,22 +138,32 @@ export default function App() {
     go('intro')
   }
 
+  const backQuestion = useCallback(() => {
+    window.clearTimeout(timer.current)
+    if (index === 0) setPhase('weights')
+    else setIndex((current) => current - 1)
+  }, [index])
+
   const pick = useCallback((value: number | null) => {
     const question = questions[index]
     setAnswers((current) => ({ ...current, [question.id]: value }))
     window.clearTimeout(timer.current)
     const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180
     timer.current = window.setTimeout(() => {
-      if (index >= questions.length - 1) setPhase('results')
-      else setIndex((current) => current + 1)
+      if (index >= questions.length - 1) {
+        setActiveId(null)
+        setPhase('results')
+      } else setIndex((current) => current + 1)
     }, delay)
   }, [index])
 
   useEffect(() => {
     if (phase !== 'questions') return
     function onKey(event: KeyboardEvent) {
+      if (event.repeat || event.defaultPrevented) return
+      if (document.querySelector('[role="dialog"]')) return
       const target = event.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
       const choice = choices.find((item) => item.key === event.key)
       if (choice) {
         event.preventDefault()
@@ -132,14 +171,14 @@ export default function App() {
       } else if (event.key === '0' || event.key === 'Escape') {
         event.preventDefault()
         pick(null)
-      } else if (event.key === 'Backspace' && index > 0) {
+      } else if (event.key === 'Backspace') {
         event.preventDefault()
-        setIndex((current) => current - 1)
+        backQuestion()
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [phase, index, pick])
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [phase, pick, backQuestion])
 
   return (
     <div className="min-h-svh">
@@ -171,7 +210,7 @@ export default function App() {
             result={result}
             headingRef={headingRef}
             onPick={pick}
-            onBack={() => (index === 0 ? go('weights') : setIndex((current) => current - 1))}
+            onBack={backQuestion}
           />
         )}
         {phase === 'results' && (
@@ -186,9 +225,9 @@ export default function App() {
               const text = `Мой Кнессет-2026: ${lines.join(', ')}. ${result.verdictTitle}`
               try {
                 await navigator.clipboard.writeText(text)
-                setCopied(true)
+                setCopiedKey(shareKey)
               } catch {
-                setCopied(false)
+                setCopiedKey(null)
               }
             }}
             onEdit={() => { setIndex(questions.length - 1); go('questions') }}
@@ -355,6 +394,7 @@ function Question({
               type="button"
               role="radio"
               aria-checked={on}
+              aria-label={`${choice.key} ${choice.name}`}
               onClick={() => onPick(choice.value)}
               className={`min-h-16 rounded-xl border px-1 text-center text-xs leading-tight font-medium sm:text-sm ${on ? 'border-primary bg-primary text-primary-foreground' : 'bg-card'}`}
             >
@@ -368,7 +408,7 @@ function Question({
         <Button type="button" variant="ghost" onClick={onBack}>Назад</Button>
         <Button type="button" variant="outline" onClick={() => onPick(null)}>Пропустить</Button>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">Клавиши 1–5, 0 чтобы пропустить.</p>
+      <p className="mt-2 text-xs text-muted-foreground">Клавиши 1–5, 0 пропуск, Backspace назад.</p>
       {started && (
         <div className="mt-8">
           <p className="mb-2 text-sm text-muted-foreground">Черновик Кнессета по уже данным ответам</p>
@@ -418,7 +458,7 @@ function Results({
       {answered < 4 && <p className="mt-2 text-sm text-muted-foreground">Ответов мало, поэтому расклад ближе к ровному дележу, чем к настоящей кампании.</p>}
       <p className="mt-4 max-w-3xl">
         Ближе всего к ответам <strong>{closest.name}</strong>
-        <span className="font-he text-muted-foreground"> {closest.he}</span>, {closest.leader}. Совпадение {formatPct(result.closeness[closest.id])}% .
+        <span className="font-he text-muted-foreground"> {closest.he}</span>, {closest.leader}. Совпадение {formatPct(result.closeness[closest.id])}%.
       </p>
 
       <div className="mt-8 grid items-start gap-6 lg:grid-cols-[1.15fr_0.85fr]">

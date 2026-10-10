@@ -73,6 +73,7 @@
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
     --radius: 0.625rem;
+    --party-otzma: #171717;
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.145 0 0);
     --sidebar-primary: oklch(0.205 0 0);
@@ -115,6 +116,7 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+    --party-otzma: #e7e5e4;
 }
 
 @layer base {
@@ -135,4 +137,5 @@
 
 .font-he {
   font-family: 'Noto Sans Hebrew', 'Manrope', sans-serif;
+  unicode-bidi: isolate;
 }

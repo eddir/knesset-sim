@@ -1,4 +1,5 @@
 import { partyById } from '@/data'
+import { placeCompassLabels } from '@/compassLayout'
 
 export function Compass({
   user,
@@ -10,13 +11,13 @@ export function Compass({
   const size = 360
   const pad = 36
   const map = (value: number) => pad + ((Math.max(-1, Math.min(1, value)) + 1) / 2) * (size - pad * 2)
-  const placed: { x0: number; y: number; x1: number }[] = []
 
   const dots = parties.map((party) => {
     const meta = partyById(party.id)
-    return { ...party, name: meta.name, color: meta.color, px: map(party.x), py: map(-party.y) }
+    return { id: party.id, name: meta.name, color: meta.color, px: map(party.x), py: map(-party.y) }
   })
   const you = user ? { px: map(user.x), py: map(-user.y) } : null
+  const labels = placeCompassLabels(dots, you, size)
 
   return (
     <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Политические координаты" className="w-full max-w-md">
@@ -35,35 +36,22 @@ export function Compass({
       <text x={size - 8} y={size / 2} textAnchor="middle" fill="currentColor" opacity={0.7} style={{ fontSize: 11 }} transform={`rotate(90 ${size - 8} ${size / 2})`}>
         Сделка и гражданское
       </text>
-      {dots.map((dot) => {
-        const text = dot.name.length > 18 ? `${dot.name.slice(0, 17)}…` : dot.name
-        const width = text.length * 5.4 + 6
-        const left = dot.px > size * 0.62
-        const x0 = left ? dot.px - 12 - width : dot.px + 12
-        let y = dot.py + 3
-        for (let attempt = 0; attempt < 6 && placed.some((box) => Math.abs(box.y - y) < 11 && x0 < box.x1 && x0 + width > box.x0); attempt += 1) {
-          y += 11
-        }
-        placed.push({ x0, y, x1: x0 + width })
-        return (
-          <g key={dot.id}>
-            <circle cx={dot.px} cy={dot.py} r={6.5} fill={dot.color} stroke="var(--card)" strokeWidth={1.5}>
-              <title>{dot.name}</title>
-            </circle>
-            <text x={left ? dot.px - 10 : dot.px + 10} y={y} textAnchor={left ? 'end' : 'start'} fill="currentColor" style={{ fontSize: 10 }}>
-              {text}
-            </text>
-          </g>
-        )
-      })}
-      {you && (
-        <g>
-          <circle cx={you.px} cy={you.py} r={8} fill="var(--card)" stroke="currentColor" strokeWidth={3} />
-          <text x={you.px + 12} y={you.py + 4} fill="currentColor" style={{ fontSize: 12, fontWeight: 700 }}>
-            Вы
-          </text>
-        </g>
-      )}
+      {dots.map((dot) => (
+        <circle key={dot.id} cx={dot.px} cy={dot.py} r={6.5} fill={dot.color} stroke="var(--card)" strokeWidth={1.5}>
+          <title>{dot.name}</title>
+        </circle>
+      ))}
+      {labels.filter((label) => label.id !== 'user').map((label) => (
+        <text key={label.id} x={label.x} y={label.y} textAnchor={label.anchor} fill="currentColor" style={{ fontSize: 10, fontWeight: 500 }}>
+          {label.text}
+        </text>
+      ))}
+      {you && <circle cx={you.px} cy={you.py} r={8} fill="var(--card)" stroke="currentColor" strokeWidth={3} />}
+      {labels.filter((label) => label.id === 'user').map((label) => (
+        <text key={label.id} x={label.x} y={label.y} textAnchor={label.anchor} fill="currentColor" style={{ fontSize: 12, fontWeight: 700 }}>
+          {label.text}
+        </text>
+      ))}
     </svg>
   )
 }
