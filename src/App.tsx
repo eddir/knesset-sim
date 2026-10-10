@@ -16,13 +16,12 @@ import {
   blocs,
   MAJORITY,
   parties,
-  partyById,
-  posts,
   questions,
   themes,
   weightLevels,
 } from '@/data'
 import { defaultWeights, formatPct, simulate, type Answers, type SeatResult, type Weights } from '@/model'
+import { I18nContext, loadLocale, partyLeader, partyName, questionText, saveLocale, themeText, ui, postName, useI18n, type Locale } from '@/i18n'
 
 type Phase = 'intro' | 'weights' | 'questions' | 'results'
 
@@ -35,11 +34,11 @@ type Save = {
 
 const STORAGE = 'knesset-2026-v1'
 const choices = [
-  { value: -1, key: '1', name: 'Первый' },
-  { value: -0.5, key: '2', name: 'Скорее первый' },
-  { value: 0, key: '3', name: 'Середина' },
-  { value: 0.5, key: '4', name: 'Скорее второй' },
-  { value: 1, key: '5', name: 'Второй' },
+  { value: -1, key: '1' },
+  { value: -0.5, key: '2' },
+  { value: 0, key: '3' },
+  { value: 0.5, key: '4' },
+  { value: 1, key: '5' },
 ]
 const choiceValues = new Set(choices.map((choice) => choice.value))
 const weightValues = new Set<number>(weightLevels.map((level) => level.id))
@@ -97,10 +96,12 @@ export default function App() {
   const [index, setIndex] = useState(initial.index)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [locale, setLocaleState] = useState<Locale>(loadLocale)
+  const t = ui[locale]
   const theme = useTheme()
   const headingRef = useRef<HTMLHeadingElement>(null)
   const timer = useRef<number>(0)
-  const result = useMemo(() => simulate(answers, weights), [answers, weights])
+  const result = useMemo(() => simulate(answers, weights, locale), [answers, weights, locale])
   const shareKey = parties.map((party) => result.seats[party.id]).join('.')
   const copied = copiedKey === shareKey
 
@@ -121,6 +122,17 @@ export default function App() {
     if (phase === 'questions') headingRef.current?.focus()
     window.scrollTo(0, 0)
   }, [phase, index])
+
+  useEffect(() => {
+    document.documentElement.lang = locale
+    document.documentElement.dir = locale === 'he' ? 'rtl' : 'ltr'
+    document.title = t.pageTitle
+  }, [locale, t.pageTitle])
+
+  function setLocale(next: Locale) {
+    setLocaleState(next)
+    saveLocale(next)
+  }
 
   const answered = questions.filter((question) => question.id in answers).length
 
@@ -181,15 +193,29 @@ export default function App() {
   }, [phase, pick, backQuestion])
 
   return (
+    <I18nContext.Provider value={{ locale, setLocale, t }}>
     <div className="min-h-svh">
-      <header className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-4 sm:px-6">
-        <button type="button" className="text-left" onClick={() => go('intro')}>
-          <span className="block text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">26-й Кнессет</span>
-          <span className="font-heading text-lg leading-none">Симулятор</span>
+      <header className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
+        <button type="button" className="text-start" onClick={() => go('intro')}>
+          <span className="block text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">{t.brandKicker}</span>
+          <span className="font-heading text-lg leading-none">{t.brand}</span>
         </button>
         <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border p-0.5" role="group" aria-label={t.language}>
+            {(['ru', 'en', 'he'] as const).map((code) => (
+              <button
+                key={code}
+                type="button"
+                aria-pressed={locale === code}
+                onClick={() => setLocale(code)}
+                className={`h-7 rounded-md px-2 text-xs font-semibold ${locale === code ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'} ${code === 'he' ? 'font-he' : ''}`}
+              >
+                {code === 'ru' ? 'RU' : code === 'en' ? 'EN' : 'עב'}
+              </button>
+            ))}
+          </div>
           <MethodDialog />
-          <Button type="button" variant="outline" size="icon" aria-label={theme.dark ? 'Светлая тема' : 'Тёмная тема'} onClick={theme.toggle}>
+          <Button type="button" variant="outline" size="icon" aria-label={theme.dark ? t.lightTheme : t.darkTheme} onClick={theme.toggle}>
             {theme.dark ? <Sun /> : <Moon />}
           </Button>
         </div>
@@ -221,8 +247,8 @@ export default function App() {
             onActive={setActiveId}
             copied={copied}
             onCopy={async () => {
-              const lines = parties.filter((party) => result.seats[party.id]).map((party) => `${party.name} ${result.seats[party.id]}`)
-              const text = `Мой Кнессет-2026: ${lines.join(', ')}. ${result.verdictTitle}`
+              const lines = parties.filter((party) => result.seats[party.id]).map((party) => `${partyName(locale, party.id)} ${result.seats[party.id]}`)
+              const text = t.shareText(lines.join(', '), result.verdictTitle)
               try {
                 await navigator.clipboard.writeText(text)
                 setCopiedKey(shareKey)
@@ -236,26 +262,22 @@ export default function App() {
         )}
       </main>
     </div>
+    </I18nContext.Provider>
   )
 }
 
 function MethodDialog() {
+  const { t } = useI18n()
   return (
     <Dialog>
-      <DialogTrigger render={<Button type="button" variant="outline" className="h-8" />}>Как считается</DialogTrigger>
+      <DialogTrigger render={<Button type="button" variant="outline" className="h-8" />}>{t.methodButton}</DialogTrigger>
       <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="font-heading text-xl">Как собирается Кнессет</DialogTitle>
-          <DialogDescription>
-            Выборы 27 октября 2026 года, 26-й Кнессет. Модель повторяет правила, а не прогноз ЦИК.
-          </DialogDescription>
+          <DialogTitle className="font-heading text-xl">{t.methodTitle}</DialogTitle>
+          <DialogDescription>{t.methodLead}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3 text-sm leading-relaxed text-foreground">
-          <p>Один общенациональный округ, закрытые списки, 120 мандатов. Список ниже 3,25% действительных голосов не получает ничего, его голоса уходят остальным.</p>
-          <p>Мандаты делятся методом Бадера-Офера: это метод д’Ондта. Каждый следующий мандат забирает список с наибольшим частным «голоса / (уже полученные места + 1)».</p>
-          <p>Правительству нужны 61 голос. Соглашения об излишках между списками здесь не включены. Отказы сидеть в одном кабинете заданы по линиям кампании 2026 года: это редакционная оценка, не юридический запрет.</p>
-          <p>Ваши ответы не выбирают одну партию. Они собирают Кнессет так, как если бы страна ответила так же. Близкие списки делят голоса, далёкие проваливаются под барьер.</p>
-          <p>Цифры опросов на первом экране - округлённое среднее опубликованных мандатных прогнозов начала октября 2026 года. «Народ Израиля» Офера Винтера в этом среднем ниже барьера.</p>
+          {t.methodParas.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
         </div>
       </DialogContent>
     </Dialog>
@@ -263,22 +285,22 @@ function MethodDialog() {
 }
 
 function Intro({ onStart, onSkip }: { onStart: () => void; onSkip: () => void }) {
+  const { t, locale } = useI18n()
   const poll = Object.fromEntries(parties.map((party) => [party.id, party.poll]))
   const right = blocs[0].ids.reduce((sum, id) => sum + (poll[id] ?? 0), 0)
   const change = blocs[1].ids.reduce((sum, id) => sum + (poll[id] ?? 0), 0)
+  const groups = groupsFrom(poll).map((group) => ({ ...group, name: partyName(locale, group.id) }))
   return (
     <div className="grid items-start gap-10 lg:grid-cols-[1.05fr_0.95fr]">
       <div>
-        <p className="text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">27 октября 2026</p>
-        <h1 className="font-heading mt-3 text-4xl leading-[1.05] font-semibold sm:text-5xl">Соберите Кнессет своими ответами</h1>
-        <p className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">
-          Восемнадцать вопросов про Газу, суд, призыв харедим и то, кто должен быть премьером. На выходе 120 мандатов, барьер 3,25% и проверка, собирается ли кабинет на 61 место.
-        </p>
+        <p className="text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">{t.date}</p>
+        <h1 className="font-heading mt-3 text-4xl leading-[1.05] font-semibold sm:text-5xl">{t.introTitle}</h1>
+        <p className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">{t.introLead}</p>
         <dl className="mt-6 grid grid-cols-3 gap-2">
           {[
-            ['120', 'мест'],
-            ['3,25%', 'барьер'],
-            ['61', 'для кабинета'],
+            ['120', t.seatsShort],
+            [locale === 'ru' ? '3,25%' : '3.25%', t.thresholdShort],
+            ['61', t.majorityShort],
           ].map(([value, name]) => (
             <div key={name} className="rounded-xl border bg-card px-3 py-3">
               <dt className="font-heading text-2xl leading-none">{value}</dt>
@@ -287,18 +309,14 @@ function Intro({ onStart, onSkip }: { onStart: () => void; onSkip: () => void })
           ))}
         </dl>
         <div className="mt-6 flex flex-wrap items-center gap-3">
-          <Button type="button" className="h-11 px-5" onClick={onStart}>Начать</Button>
-          <Button type="button" variant="ghost" className="h-11" onClick={onSkip}>Сразу к вопросам</Button>
+          <Button type="button" className="h-11 px-5" onClick={onStart}>{t.start}</Button>
+          <Button type="button" variant="ghost" className="h-11" onClick={onSkip}>{t.skipToQuestions}</Button>
         </div>
-        <p className="mt-4 max-w-xl text-sm text-muted-foreground">
-          Сейчас ни блок Нетаньяху ({right}), ни блок перемен ({change}) не дотягивают до 61. Так выглядит среднее опросов начала октября, не ваш результат.
-        </p>
+        <p className="mt-4 max-w-xl text-sm text-muted-foreground">{t.pollNow(right, change)}</p>
       </div>
       <figure className="rounded-2xl border bg-card p-3 sm:p-5">
-        <Hemicycle groups={groupsFrom(poll)} label="120" sub="мандатов" />
-        <figcaption className="px-2 pb-1 text-sm text-muted-foreground">
-          Ликуд и Яшар по 23. РААМ и Объединённый список держат отдельный карман мандатов.
-        </figcaption>
+        <Hemicycle groups={groups} label="120" sub={t.hemicycleSub} />
+        <figcaption className="px-2 pb-1 text-sm text-muted-foreground">{t.figcaption}</figcaption>
       </figure>
     </div>
   )
@@ -313,41 +331,45 @@ function Weights({
   onChange: (themeId: string, level: number) => void
   onNext: () => void
 }) {
+  const { t, locale } = useI18n()
   return (
     <div className="mx-auto max-w-3xl">
-      <p className="text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">Шаг 1</p>
-      <h1 className="font-heading mt-2 text-3xl font-semibold sm:text-4xl">Что для вас решает выборы</h1>
-      <p className="mt-3 text-muted-foreground">Тема с весом «не важно» не влияет на мандаты. По умолчанию все шесть одинаково важны.</p>
+      <p className="text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">{t.step}</p>
+      <h1 className="font-heading mt-2 text-3xl font-semibold sm:text-4xl">{t.weightsTitle}</h1>
+      <p className="mt-3 text-muted-foreground">{t.weightsLead}</p>
       <div className="mt-6 space-y-3">
-        {themes.map((theme) => (
-          <div key={theme.id} className="rounded-xl border bg-card p-4">
+        {themes.map((item) => {
+          const copy = themeText(locale, item.id)
+          return (
+          <div key={item.id} className="rounded-xl border bg-card p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="font-medium">{theme.name}</h2>
-                <p className="text-sm text-muted-foreground">{theme.hint}</p>
+                <h2 className="font-medium">{copy.name}</h2>
+                <p className="text-sm text-muted-foreground">{copy.hint}</p>
               </div>
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-4" role="radiogroup" aria-label={theme.name}>
+              <div className="grid grid-cols-2 gap-1 sm:grid-cols-4" role="radiogroup" aria-label={copy.name}>
                 {weightLevels.map((level) => {
-                  const on = weights[theme.id] === level.id
+                  const on = weights[item.id] === level.id
                   return (
                     <button
                       key={level.id}
                       type="button"
                       role="radio"
                       aria-checked={on}
-                      onClick={() => onChange(theme.id, level.id)}
+                      onClick={() => onChange(item.id, level.id)}
                       className={`h-9 rounded-lg px-2 text-xs font-medium ${on ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}`}
                     >
-                      {level.name}
+                      {t.weights[level.id]}
                     </button>
                   )
                 })}
               </div>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
-      <Button type="button" className="mt-6 h-11 px-5" onClick={onNext}>К вопросам</Button>
+      <Button type="button" className="mt-6 h-11 px-5" onClick={onNext}>{t.toQuestions}</Button>
     </div>
   )
 }
@@ -367,51 +389,54 @@ function Question({
   onPick: (value: number | null) => void
   onBack: () => void
 }) {
+  const { t, locale } = useI18n()
   const question = questions[index]
-  const theme = themes.find((item) => item.id === question.theme)
+  const copy = questionText(locale, question.id)
+  const theme = themeText(locale, question.theme)
   const current = question.id in answers ? answers[question.id] : undefined
   const started = Object.keys(answers).length > 0
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-4 flex items-center justify-between gap-3 text-sm text-muted-foreground">
-        <span>{theme?.name}</span>
-        <span>Вопрос {index + 1} из {questions.length}</span>
+        <span>{theme.name}</span>
+        <span>{t.questionOf(index + 1, questions.length)}</span>
       </div>
       <div className="mb-5 h-1 overflow-hidden rounded-full bg-muted">
         <div className="h-full bg-primary" style={{ width: `${(index / questions.length) * 100}%` }} />
       </div>
-      <h1 ref={headingRef} tabIndex={-1} className="font-heading text-3xl font-semibold outline-none sm:text-4xl">{question.title}</h1>
+      <h1 ref={headingRef} tabIndex={-1} className="font-heading text-3xl font-semibold outline-none sm:text-4xl">{copy.title}</h1>
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <Pole mark="А" text={question.a} hot={typeof current === 'number' && current < 0} />
-        <Pole mark="Б" text={question.b} hot={typeof current === 'number' && current > 0} />
+        <Pole text={copy.a} hot={typeof current === 'number' && current < 0} label={t.option(t.marks[0])} />
+        <Pole text={copy.b} hot={typeof current === 'number' && current > 0} label={t.option(t.marks[1])} />
       </div>
-      <div className="mt-4 grid grid-cols-5 gap-1.5" role="radiogroup" aria-label="Ответ">
-        {choices.map((choice) => {
+      <div className="mt-4 grid grid-cols-5 gap-1.5" role="radiogroup" aria-label={t.answerLabel}>
+        {choices.map((choice, choiceIndex) => {
           const on = current === choice.value
+          const name = t.choices[choiceIndex]
           return (
             <button
               key={choice.key}
               type="button"
               role="radio"
               aria-checked={on}
-              aria-label={`${choice.key} ${choice.name}`}
+              aria-label={`${choice.key} ${name}`}
               onClick={() => onPick(choice.value)}
               className={`min-h-16 rounded-xl border px-1 text-center text-xs leading-tight font-medium sm:text-sm ${on ? 'border-primary bg-primary text-primary-foreground' : 'bg-card'}`}
             >
               <span className="block text-[10px] opacity-70">{choice.key}</span>
-              {choice.name}
+              {name}
             </button>
           )
         })}
       </div>
       <div className="mt-4 flex items-center justify-between gap-3">
-        <Button type="button" variant="ghost" onClick={onBack}>Назад</Button>
-        <Button type="button" variant="outline" onClick={() => onPick(null)}>Пропустить</Button>
+        <Button type="button" variant="ghost" onClick={onBack}>{t.back}</Button>
+        <Button type="button" variant="outline" onClick={() => onPick(null)}>{t.skip}</Button>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">Клавиши 1–5, 0 пропуск, Backspace назад.</p>
+      <p className="mt-2 text-xs text-muted-foreground">{t.keysHint}</p>
       {started && (
         <div className="mt-8">
-          <p className="mb-2 text-sm text-muted-foreground">Черновик Кнессета по уже данным ответам</p>
+          <p className="mb-2 text-sm text-muted-foreground">{t.draft}</p>
           <StackedBar seats={result.seats} />
         </div>
       )}
@@ -419,10 +444,10 @@ function Question({
   )
 }
 
-function Pole({ mark, text, hot }: { mark: string; text: string; hot: boolean }) {
+function Pole({ text, hot, label }: { text: string; hot: boolean; label: string }) {
   return (
     <div className={`rounded-xl border bg-card p-4 ${hot ? 'ring-2 ring-primary' : ''}`}>
-      <span className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">Вариант {mark}</span>
+      <span className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">{label}</span>
       <p className="mt-1 leading-snug">{text}</p>
     </div>
   )
@@ -447,18 +472,20 @@ function Results({
   onEdit: () => void
   onReset: () => void
 }) {
-  const closest = partyById(result.closestId)
-  const groups = groupsFrom(result.seats)
+  const { t, locale } = useI18n()
+  const closestId = result.closestId
+  const groups = groupsFrom(result.seats).map((group) => ({ ...group, name: partyName(locale, group.id) }))
   const below = parties.filter((party) => result.seats[party.id] === 0)
   return (
     <div>
-      <p className="text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">Ваш 26-й Кнессет</p>
+      <p className="text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">{t.yourKnesset}</p>
       <h1 className="font-heading mt-2 max-w-3xl text-4xl leading-tight font-semibold sm:text-5xl">{result.verdictTitle}</h1>
       <p className="mt-4 max-w-3xl leading-relaxed text-muted-foreground">{result.verdictText}</p>
-      {answered < 4 && <p className="mt-2 text-sm text-muted-foreground">Ответов мало, поэтому расклад ближе к ровному дележу, чем к настоящей кампании.</p>}
+      {answered < 4 && <p className="mt-2 text-sm text-muted-foreground">{t.fewAnswers}</p>}
       <p className="mt-4 max-w-3xl">
-        Ближе всего к ответам <strong>{closest.name}</strong>
-        <span className="font-he text-muted-foreground"> {closest.he}</span>, {closest.leader}. Совпадение {formatPct(result.closeness[closest.id])}%.
+        {t.closestBefore} <strong>{partyName(locale, closestId)}</strong>
+        {locale !== 'he' && <span className="font-he text-muted-foreground"> {parties.find((party) => party.id === closestId)?.he}</span>}
+        {`, ${partyLeader(locale, closestId)}. ${t.matchWord} ${formatPct(result.closeness[closestId], locale)}%.`}
       </p>
 
       <div className="mt-8 grid items-start gap-6 lg:grid-cols-[1.15fr_0.85fr]">
@@ -468,7 +495,7 @@ function Results({
             activeId={activeId}
             onPick={(id) => onActive(activeId === id ? null : id)}
             label="120"
-            sub="мандатов"
+            sub={t.hemicycleSub}
           />
         </div>
         <ul className="space-y-1.5">
@@ -481,12 +508,14 @@ function Results({
                 <button
                   type="button"
                   onClick={() => onActive(activeId === party.id ? null : party.id)}
-                  className={`flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left ${activeId === party.id ? 'bg-muted' : ''}`}
+                  className={`flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-start ${activeId === party.id ? 'bg-muted' : ''}`}
                 >
                   <i className="size-3 shrink-0 rounded-full" style={{ background: party.color }} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{party.name}</span>
-                    <span className="font-he block truncate text-xs text-muted-foreground">{party.he} · {party.leader}</span>
+                    <span className="block truncate font-medium">{partyName(locale, party.id)}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {locale === 'he' ? partyLeader(locale, party.id) : <><span className="font-he">{party.he}</span> · {partyLeader(locale, party.id)}</>}
+                    </span>
                   </span>
                   <span className="font-heading text-xl">{result.seats[party.id]}</span>
                 </button>
@@ -494,14 +523,14 @@ function Results({
             ))}
           {below.length > 0 && (
             <li className="px-2 pt-3 text-sm text-muted-foreground">
-              Ниже барьера 3,25%: {below.map((party) => `${party.name} (${formatPct(result.raw[party.id])}%)`).join(', ')}.
+              {t.belowLine(below.map((party) => `${partyName(locale, party.id)} (${formatPct(result.raw[party.id], locale)}%)`).join(', '))}
             </li>
           )}
         </ul>
       </div>
 
       <section className="mt-10">
-        <h2 className="font-heading text-2xl font-semibold">Кто собирает 61</h2>
+        <h2 className="font-heading text-2xl font-semibold">{t.whoBuilds}</h2>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {result.scenarios.map((scenario) => {
             const enough = scenario.total >= MAJORITY
@@ -512,18 +541,17 @@ function Results({
                   <h3 className="font-medium">{scenario.name}</h3>
                   <p className={`font-heading text-3xl leading-none ${enough ? 'text-primary' : ''}`}>{scenario.total}</p>
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">{enough ? `Хватает на большинство${scenario.outside.length ? ' только с внешней поддержкой' : ''}` : `Не хватает ${MAJORITY - scenario.total}`}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{enough ? t.enough(scenario.outside.length > 0) : t.shortBy(MAJORITY - scenario.total)}</p>
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {scenario.ids.map((id) => {
-                    const party = partyById(id)
-                    return <span key={id} className="rounded-full bg-muted px-2 py-0.5 text-xs">{party.name} {result.seats[id]}</span>
-                  })}
+                  {scenario.ids.map((id) => (
+                    <span key={id} className="rounded-full bg-muted px-2 py-0.5 text-xs">{partyName(locale, id)} {result.seats[id]}</span>
+                  ))}
                   {scenario.outside.map((id) => (
-                    <span key={id} className="rounded-full border border-dashed px-2 py-0.5 text-xs">извне: {partyById(id).name} {result.seats[id]}</span>
+                    <span key={id} className="rounded-full border border-dashed px-2 py-0.5 text-xs">{t.outsidePrefix}: {partyName(locale, id)} {result.seats[id]}</span>
                   ))}
                 </div>
                 <p className="mt-3 text-sm leading-relaxed">{scenario.note}</p>
-                {scenario.pm && <p className="mt-2 text-sm">Кандидат в премьеры: {partyById(scenario.pm).leader}</p>}
+                {scenario.pm && <p className="mt-2 text-sm">{t.pmCandidate(partyLeader(locale, scenario.pm))}</p>}
               </article>
             )
           })}
@@ -532,13 +560,13 @@ function Results({
 
       {result.coalitions.length > 0 && (
         <section className="mt-10">
-          <h2 className="font-heading text-2xl font-semibold">Самые короткие кабинеты</h2>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">Составы без лишней партии: если убрать кого-то одного, 61 уже нет. Пары, которые отказались сидеть вместе, сюда не попадают.</p>
+          <h2 className="font-heading text-2xl font-semibold">{t.shortestTitle}</h2>
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{t.shortestLead}</p>
           <ul className="mt-4 space-y-2">
             {result.coalitions.map((coalition) => (
               <li key={coalition.ids.join('-')} className="rounded-xl border bg-card px-4 py-3 text-sm">
-                <span className="font-medium">{coalition.ids.map((id) => partyById(id).name).join(' + ')}</span>
-                <span className="text-muted-foreground"> · {coalition.seats} · премьер {partyById(coalition.pm).leader}</span>
+                <span className="font-medium">{coalition.ids.map((id) => partyName(locale, id)).join(' + ')}</span>
+                <span className="text-muted-foreground"> · {coalition.seats} · {t.primeWord} {partyLeader(locale, coalition.pm)}</span>
               </li>
             ))}
           </ul>
@@ -547,18 +575,16 @@ function Results({
 
       {result.cabinet && (
         <section className="mt-10">
-          <h2 className="font-heading text-2xl font-semibold">Портфели</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Черновая раскладка по тому, какой список в этом большинстве ближе к теме портфеля. Это не коалиционное соглашение.</p>
+          <h2 className="font-heading text-2xl font-semibold">{t.portfolios}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{t.portfoliosLead}</p>
           <ul className="mt-4 grid gap-2 sm:grid-cols-2">
             {result.cabinet.map((seat) => {
-              const post = posts.find((item) => item.id === seat.post)
-              const party = partyById(seat.partyId)
               return (
                 <li key={seat.post} className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
-                  <span>{post?.name}</span>
-                  <span className="text-right">
-                    <span className="block font-medium">{party.name}</span>
-                    <span className="block text-xs text-muted-foreground">{party.leader}</span>
+                  <span>{postName(locale, seat.post)}</span>
+                  <span className="text-end">
+                    <span className="block font-medium">{partyName(locale, seat.partyId)}</span>
+                    <span className="block text-xs text-muted-foreground">{partyLeader(locale, seat.partyId)}</span>
                   </span>
                 </li>
               )
@@ -570,30 +596,30 @@ function Results({
       <section className="mt-10 rounded-2xl border bg-card p-5">
         <h2 className="font-heading text-2xl font-semibold">{result.outlookTitle}</h2>
         <p className="mt-2 max-w-3xl leading-relaxed">{result.outlookText}</p>
-        <p className="mt-2 text-sm text-muted-foreground">Сценарий по вашим ответам, не прогноз на 2030 год.</p>
+        <p className="mt-2 text-sm text-muted-foreground">{t.outlookCaveat}</p>
       </section>
 
       <section className="mt-10">
-        <h2 className="font-heading text-2xl font-semibold">Рядом с опросами</h2>
-        <p className="mt-2 text-sm text-muted-foreground">Слева ваш Кнессет, справа среднее мандатных прогнозов начала октября 2026 года.</p>
+        <h2 className="font-heading text-2xl font-semibold">{t.besidePolls}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">{t.besideLead}</p>
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[32rem] text-sm">
-            <thead className="text-left text-muted-foreground">
+          <table className="w-full text-sm">
+            <thead className="text-start text-muted-foreground">
               <tr>
-                <th className="py-2 font-medium">Список</th>
-                <th className="py-2 font-medium">Вы</th>
-                <th className="py-2 font-medium">Опросы</th>
+                <th className="py-2 pe-3 text-start font-medium">{t.colList}</th>
+                <th className="py-2 ps-3 text-end font-medium">{t.colYou}</th>
+                <th className="py-2 ps-3 text-end font-medium">{t.colPolls}</th>
               </tr>
             </thead>
             <tbody>
               {parties.map((party) => (
                 <tr key={party.id} className="border-t">
-                  <td className="py-2 pr-3">
-                    <span className="mr-2 inline-block size-2.5 rounded-full align-middle" style={{ background: party.color }} />
-                    {party.name}
+                  <td className="py-2 pe-3">
+                    <span className="me-2 inline-block size-2.5 rounded-full align-middle" style={{ background: party.color }} />
+                    {partyName(locale, party.id)}
                   </td>
-                  <td className="py-2">{result.seats[party.id]}</td>
-                  <td className="py-2">{party.poll || 'барьер'}</td>
+                  <td className="py-2 ps-3 text-end tabular-nums">{result.seats[party.id]}</td>
+                  <td className="py-2 ps-3 text-end">{party.poll || t.belowWord}</td>
                 </tr>
               ))}
             </tbody>
@@ -602,21 +628,19 @@ function Results({
       </section>
 
       <section className="mt-10">
-        <h2 className="font-heading text-2xl font-semibold">Где вы стоите</h2>
-        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">Горизонталь: от силы и территории к сделке. Вертикаль: от раввината и власти большинства к суду и светским правилам. Точка «вы» считается по тем же вопросам.</p>
+        <h2 className="font-heading text-2xl font-semibold">{t.whereTitle}</h2>
+        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{t.whereLead}</p>
         <div className="mt-4 max-w-lg">
           <Compass user={result.compassUser} parties={result.compassParties} />
         </div>
       </section>
 
       <div className="mt-10 flex flex-wrap gap-3">
-        <Button type="button" className="h-11 px-5" onClick={onCopy}>{copied ? 'Скопировано' : 'Скопировать расклад'}</Button>
-        <Button type="button" variant="outline" className="h-11" onClick={onEdit}>Изменить ответы</Button>
-        <Button type="button" variant="ghost" className="h-11" onClick={onReset}>Сначала</Button>
+        <Button type="button" className="h-11 px-5" onClick={onCopy}>{copied ? t.copied : t.copy}</Button>
+        <Button type="button" variant="outline" className="h-11" onClick={onEdit}>{t.editAnswers}</Button>
+        <Button type="button" variant="ghost" className="h-11" onClick={onReset}>{t.restart}</Button>
       </div>
-      <p className="mt-8 max-w-3xl text-xs leading-relaxed text-muted-foreground">
-        Позиции списков - редакционная оценка по публичным заявлениям на осень 2026 года. Кнессет распущен 17 июля 2026 года, голосование назначено на 27 октября. Проект не связан с Центральной избирательной комиссией и не является избирательной агитацией.
-      </p>
+      <p className="mt-8 max-w-3xl text-xs leading-relaxed text-muted-foreground">{t.disclaimer}</p>
     </div>
   )
 }

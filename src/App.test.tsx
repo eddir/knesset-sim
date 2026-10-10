@@ -7,6 +7,8 @@ import App from './App'
 beforeEach(() => {
   cleanup()
   localStorage.clear()
+  document.documentElement.lang = 'ru'
+  document.documentElement.dir = 'ltr'
   document.documentElement.classList.remove('dark')
   window.scrollTo = () => {}
   window.matchMedia = ((query: string) => ({
@@ -114,5 +116,19 @@ describe('симулятор', () => {
       await new Promise((resolve) => setTimeout(resolve, 2400))
     })
     expect(screen.getByRole('button', { name: 'Скопировать расклад' })).toBeTruthy()
+  })
+
+  it('переключается на английский и иврит', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'EN' }))
+    expect(screen.getByRole('heading', { name: 'Build the Knesset with your answers' })).toBeTruthy()
+    expect(document.documentElement.lang).toBe('en')
+    expect(document.documentElement.dir).toBe('ltr')
+    fireEvent.click(screen.getByRole('button', { name: 'עב' }))
+    expect(screen.getByRole('heading', { name: 'בנו את הכנסת מהתשובות שלכם' })).toBeTruthy()
+    expect(document.documentElement.lang).toBe('he')
+    expect(document.documentElement.dir).toBe('rtl')
+    fireEvent.click(screen.getByRole('button', { name: 'RU' }))
+    expect(screen.getByRole('heading', { name: 'Соберите Кнессет своими ответами' })).toBeTruthy()
   })
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parties, questions, SEAT_COUNT, THRESHOLD } from './data'
-import { buildScenarios, dhondt, minimalCoalitions, simulate, vetoed } from './model'
+import { questionText, themeText } from './i18n'
+import { buildScenarios, defaultWeights, dhondt, minimalCoalitions, simulate, vetoed } from './model'
 
 function fill(value: number) {
   return Object.fromEntries(questions.map((question) => [question.id, value]))
@@ -13,6 +14,36 @@ function seatsOf(value: number) {
 function bloc(seats: Record<string, number>, ids: string[]) {
   return ids.reduce((sum, id) => sum + (seats[id] ?? 0), 0)
 }
+
+describe('языки', () => {
+  it('переводит вердикт и не меняет мандаты', () => {
+    const ru = simulate(fill(0))
+    const en = simulate(fill(0), defaultWeights(), 'en')
+    const he = simulate(fill(0), defaultWeights(), 'he')
+    expect(en.seats).toEqual(ru.seats)
+    expect(he.seats).toEqual(ru.seats)
+    expect(ru.verdictTitle).toMatch(/[А-Яа-я]/)
+    expect(en.verdictTitle).not.toMatch(/[А-Яа-яЁё]/)
+    expect(he.verdictTitle).toMatch(/[\u0590-\u05FF]/)
+    expect(en.scenarios.map((item) => item.name).join(' ')).not.toMatch(/[А-Яа-яЁё]/)
+  })
+
+  it('даёт английский и иврит каждому вопросу и теме', () => {
+    for (const question of questions) {
+      for (const locale of ['en', 'he'] as const) {
+        const copy = questionText(locale, question.id)
+        expect(copy.title.length).toBeGreaterThan(1)
+        expect(copy.a.length).toBeGreaterThan(1)
+        expect(copy.b.length).toBeGreaterThan(1)
+        expect(`${copy.title} ${copy.a} ${copy.b}`).not.toMatch(/[А-Яа-яЁё]/)
+      }
+    }
+    for (const theme of ['security', 'land', 'power', 'faith', 'money', 'citizens']) {
+      expect(themeText('en', theme).name).not.toMatch(/[А-Яа-яЁё]/)
+      expect(themeText('he', theme).name).toMatch(/[\u0590-\u05FF]/)
+    }
+  })
+})
 
 describe('dhondt', () => {
   it('делит классический пример 8 мандатов', () => {

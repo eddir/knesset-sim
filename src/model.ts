@@ -13,6 +13,7 @@ import {
   weightLevels,
   type Question,
 } from './data'
+import { leaderOf, numberLocale, scenarioText, type Locale } from './i18n'
 
 const SIGMA = 0.4
 
@@ -164,7 +165,7 @@ function sumIds(seats: Record<string, number>, ids: string[]) {
   return ids.reduce((total, id) => total + (seats[id] ?? 0), 0)
 }
 
-export function buildScenarios(seats: Record<string, number>): Scenario[] {
+export function buildScenarios(seats: Record<string, number>, locale: Locale = 'ru'): Scenario[] {
   const rightIds = blocs[0].ids.filter((id) => (seats[id] ?? 0) > 0)
   const changeIds = blocs[1].ids.filter((id) => (seats[id] ?? 0) > 0)
   const raam = seats.raam ?? 0
@@ -174,52 +175,53 @@ export function buildScenarios(seats: Record<string, number>): Scenario[] {
   const withRaamIds = raam > 0 ? [...changeIds, 'raam'] : changeIds
   const withRaam = changeSeats + raam
 
+  const text = (id: string) => scenarioText(locale, id)
   const scenarios: Scenario[] = [
     {
       id: 'right',
-      name: 'Блок Нетаньяху',
+      name: text('right').name,
       ids: rightIds,
       seats: rightSeats,
       pm: primeMinister(rightIds, seats),
       outside: [],
       total: rightSeats,
-      note: 'Ликуд, религиозная правая и харедимные списки, у которых есть мандаты.',
+      note: text('right').note,
     },
     {
       id: 'change',
-      name: 'Блок перемен',
+      name: text('change').name,
       ids: changeIds,
       seats: changeSeats,
       pm: primeMinister(changeIds, seats),
       outside: [],
       total: changeSeats,
-      note: 'Яшар, Бейахад, Демократы и Наш дом Израиль. Без арабских списков.',
+      note: text('change').note,
     },
   ]
 
   if (raam > 0) {
     scenarios.push({
       id: 'raam',
-      name: 'Блок перемен и РААМ',
+      name: text('raam').name,
       ids: withRaamIds,
       seats: withRaam,
       pm: primeMinister(changeIds, seats),
       outside: [],
       total: withRaam,
-      note: 'Так уже собирали кабинет в 2021 году: сионистская оппозиция плюс РААМ Мансура Аббаса.',
+      note: text('raam').note,
     })
   }
 
   if (joint > 0) {
     scenarios.push({
       id: 'outside',
-      name: 'Меньшинство с внешней поддержкой',
+      name: text('outside').name,
       ids: withRaamIds,
       seats: withRaam,
       pm: primeMinister(changeIds, seats),
       outside: ['joint'],
       total: withRaam + joint,
-      note: 'Объединённый список не входит в кабинет. Голоса за инвеституру возможны только если на это пойдёт весь список, включая Балад. Это развилка, не договор.',
+      note: text('outside').note,
     })
   }
 
@@ -238,12 +240,7 @@ function pickPrimary(scenarios: Scenario[], closestId: string): string | null {
   return (cabinet.find((item) => item.id === preferred) ?? cabinet.slice().sort((a, b) => b.total - a.total)[0]).id
 }
 
-function leaderName(id: string | null) {
-  if (!id) return 'некому'
-  return partyById(id).leader
-}
-
-function narrate(scenarios: Scenario[], primaryId: string | null) {
+function narrate(scenarios: Scenario[], primaryId: string | null, locale: Locale) {
   const byId = Object.fromEntries(scenarios.map((item) => [item.id, item]))
   const right = byId.right
   const change = byId.change
@@ -254,35 +251,107 @@ function narrate(scenarios: Scenario[], primaryId: string | null) {
   if (!primary) {
     const best = scenarios.slice().sort((a, b) => b.total - a.total)[0]
     return {
-      verdictTitle: '61 не собирается',
-      verdictText: `Блок Нетаньяху получает ${right?.seats ?? 0}, блок перемен ${change?.seats ?? 0}${raam ? `, с РААМ ${raam.total}` : ''}${outside ? `, а с внешней поддержкой Объединённого списка ${outside.total}` : ''}. Ближайшая попытка всё равно короче большинства. Такой Кнессет обычно заканчивается торгом и разговором о повторных выборах.`,
-      outlookTitle: 'Повторные выборы',
+      verdictTitle: locale === 'he' ? '61 לא נסגר' : locale === 'en' ? '61 does not come together' : '61 не собирается',
+      verdictText: noMajorityText(locale, right?.seats ?? 0, change?.seats ?? 0, raam?.total, outside?.total),
+      outlookTitle: locale === 'he' ? 'בחירות חוזרות' : locale === 'en' ? 'Another election' : 'Повторные выборы',
       outlookText: best
-        ? `Дальше всех дотягивается «${best.name}»: ${best.total} из ${MAJORITY}. Президент может выдать первый мандат, но без 61 он сгорает.`
-        : 'Мандатов не хватает ни одному лагерю.',
+        ? repeatOutlook(locale, best.name, best.total)
+        : locale === 'he'
+          ? 'לאף מחנה אין מספיק מנדטים.'
+          : locale === 'en'
+            ? 'No camp has the seats.'
+            : 'Мандатов не хватает ни одному лагерю.',
     }
   }
 
   if (primary.outside.length) {
-    return {
-      verdictTitle: `Извне набирается ${primary.total}`,
-      verdictText: `Кабинет блока перемен${raam ? ' и РААМ' : ''} имеет только ${primary.seats}. Вместе с Объединённым списком, который остаётся вне правительства, выходит ${primary.total}. Это правительство меньшинства: бюджет жив, пока внешняя поддержка не отказала.`,
-      outlookTitle: 'Хрупкий кабинет',
-      outlookText: `Премьер в таком раскладе ${leaderName(primary.pm)}. Объединённый список портфелей не получает и может отозвать поддержку на первом же бюджете.`,
-    }
+    return outsideCabinet(locale, primary.seats, primary.total, Boolean(raam), leaderOf(locale, primary.pm))
   }
 
   const others = scenarios.filter((item) => item.id !== primary.id && item.outside.length === 0 && item.total >= MAJORITY)
-  const rival = others.length ? ` Собрать большинство может и другой лагерь: ${others.map((item) => `${item.name} (${item.total})`).join(', ')}.` : ''
+  const pm = leaderOf(locale, primary.pm)
   return {
     verdictTitle: `${primary.name}: ${primary.total}`,
-    verdictText: `${primary.note} Этого хватает на инвеституру.${rival} Мандат на формирование, по составу этого большинства, получает ${leaderName(primary.pm)}.`,
-    outlookTitle: primary.id === 'right' ? 'Правый кабинет' : 'Кабинет без Нетаньяху',
-    outlookText:
-      primary.id === 'right'
-        ? 'В повестке снова судебная реформа, спор о призыве харедим откладывают, а линия по Газе остаётся линией кабинета безопасности.'
-        : 'В повестке комиссия по 7 октября и закон о призыве. РААМ, если он внутри, торгует бюджеты арабских городов, а не МИД и не армию.',
+    verdictText: majorityText(locale, primary.note, others.map((item) => `${item.name} (${item.total})`), pm),
+    outlookTitle: outlookTitle(locale, primary.id),
+    outlookText: outlookBody(locale, primary.id),
   }
+}
+
+function noMajorityText(locale: Locale, right: number, change: number, raamTotal?: number, outsideTotal?: number) {
+  if (locale === 'en') {
+    return `The Netanyahu bloc gets ${right}, the change bloc ${change}${raamTotal != null ? `, ${raamTotal} with Ra'am` : ''}${outsideTotal != null ? `, and ${outsideTotal} with outside support from the Joint List` : ''}. The nearest attempt is still short of a majority. A Knesset like this usually ends in bargaining and talk of another election.`
+  }
+  if (locale === 'he') {
+    return `גוש נתניהו מקבל ${right}, גוש השינוי ${change}${raamTotal != null ? `, עם רע״מ ${raamTotal}` : ''}${outsideTotal != null ? `, ועם תמיכה מבחוץ של הרשימה המשותפת ${outsideTotal}` : ''}. גם הניסיון הקרוב ביותר קצר מרוב. כנסת כזאת נגמרת בדרך כלל במיקוח ובדיבור על בחירות חוזרות.`
+  }
+  return `Блок Нетаньяху получает ${right}, блок перемен ${change}${raamTotal != null ? `, с РААМ ${raamTotal}` : ''}${outsideTotal != null ? `, а с внешней поддержкой Объединённого списка ${outsideTotal}` : ''}. Ближайшая попытка всё равно короче большинства. Такой Кнессет обычно заканчивается торгом и разговором о повторных выборах.`
+}
+
+function repeatOutlook(locale: Locale, name: string, total: number) {
+  if (locale === 'en') return `The furthest reach is “${name}”: ${total} of ${MAJORITY}. The president can hand over the first mandate, but without 61 it expires.`
+  if (locale === 'he') return `הכי רחוק מגיע «${name}»: ${total} מתוך ${MAJORITY}. הנשיא יכול לתת את המנדט הראשון, אבל בלי 61 הוא פוקע.`
+  return `Дальше всех дотягивается «${name}»: ${total} из ${MAJORITY}. Президент может выдать первый мандат, но без 61 он сгорает.`
+}
+
+function outsideCabinet(locale: Locale, seats: number, total: number, withRaam: boolean, pm: string) {
+  if (locale === 'en') {
+    return {
+      verdictTitle: `Outside support reaches ${total}`,
+      verdictText: `The change bloc${withRaam ? " and Ra'am" : ''} cabinet has only ${seats}. Together with the Joint List, which stays out of government, that is ${total}. This is a minority government: the budget lives until outside support walks away.`,
+      outlookTitle: 'A fragile cabinet',
+      outlookText: `The prime minister in this lineup is ${pm}. The Joint List gets no portfolios and can withdraw support on the first budget.`,
+    }
+  }
+  if (locale === 'he') {
+    return {
+      verdictTitle: `עם תמיכה מבחוץ יש ${total}`,
+      verdictText: `לממשלת גוש השינוי${withRaam ? ' ורע״מ' : ''} יש רק ${seats}. יחד עם הרשימה המשותפת, שנשארת מחוץ לממשלה, יוצא ${total}. זו ממשלת מיעוט: התקציב חי כל עוד התמיכה מבחוץ לא נסוגה.`,
+      outlookTitle: 'ממשלה שברירית',
+      outlookText: `ראש הממשלה בהרכב הזה הוא ${pm}. הרשימה המשותפת לא מקבלת תיקים ויכולה למשוך את התמיכה כבר בתקציב הראשון.`,
+    }
+  }
+  return {
+    verdictTitle: `Извне набирается ${total}`,
+    verdictText: `Кабинет блока перемен${withRaam ? ' и РААМ' : ''} имеет только ${seats}. Вместе с Объединённым списком, который остаётся вне правительства, выходит ${total}. Это правительство меньшинства: бюджет жив, пока внешняя поддержка не отказала.`,
+    outlookTitle: 'Хрупкий кабинет',
+    outlookText: `Премьер в таком раскладе ${pm}. Объединённый список портфелей не получает и может отозвать поддержку на первом же бюджете.`,
+  }
+}
+
+function majorityText(locale: Locale, note: string, rivals: string[], pm: string) {
+  if (locale === 'en') {
+    const rival = rivals.length ? ` Another camp can also build a majority: ${rivals.join(', ')}.` : ''
+    return `${note} That is enough for an investiture.${rival} On the shape of this majority, the mandate to form a government goes to ${pm}.`
+  }
+  if (locale === 'he') {
+    const rival = rivals.length ? ` גם מחנה אחר יכול להרכיב רוב: ${rivals.join(', ')}.` : ''
+    return `${note} זה מספיק להשבעה.${rival} לפי הרכב הרוב הזה, המנדט להרכבת ממשלה הולך אל ${pm}.`
+  }
+  const rival = rivals.length ? ` Собрать большинство может и другой лагерь: ${rivals.join(', ')}.` : ''
+  return `${note} Этого хватает на инвеституру.${rival} Мандат на формирование, по составу этого большинства, получает ${pm}.`
+}
+
+function outlookTitle(locale: Locale, id: string) {
+  if (locale === 'en') return id === 'right' ? 'A right-wing cabinet' : 'A cabinet without Netanyahu'
+  if (locale === 'he') return id === 'right' ? 'ממשלת ימין' : 'ממשלה בלי נתניהו'
+  return id === 'right' ? 'Правый кабинет' : 'Кабинет без Нетаньяху'
+}
+
+function outlookBody(locale: Locale, id: string) {
+  if (locale === 'en') {
+    return id === 'right'
+      ? 'The agenda is the judicial overhaul again, the argument over drafting Haredim is postponed, and the Gaza line stays the security cabinet’s line.'
+      : "The agenda is an October 7 commission and a draft law. Ra'am, if it is inside, bargains budgets for Arab cities, not the foreign ministry or the army."
+  }
+  if (locale === 'he') {
+    return id === 'right'
+      ? 'על השולחן שוב הרפורמה המשפטית, הוויכוח על גיוס חרדים נדחה, וקו עזה נשאר הקו של הקבינט הביטחוני.'
+      : 'על השולחן ועדת חקירה ל־7 באוקטובר וחוק הגיוס. רע״מ, אם היא בפנים, סוחרת תקציבים לערים הערביות, לא את משרד החוץ ולא את הצבא.'
+  }
+  return id === 'right'
+    ? 'В повестке снова судебная реформа, спор о призыве харедим откладывают, а линия по Газе остаётся линией кабинета безопасности.'
+    : 'В повестке комиссия по 7 октября и закон о призыве. РААМ, если он внутри, торгует бюджеты арабских городов, а не МИД и не армию.'
 }
 
 function compassOf(weights: Weights, pick: (question: Question) => number | null) {
@@ -328,7 +397,7 @@ function buildCabinet(ids: string[], seats: Record<string, number>, pm: string |
   return assigned
 }
 
-export function simulate(answers: Answers, weights: Weights = defaultWeights()): SeatResult {
+export function simulate(answers: Answers, weights: Weights = defaultWeights(), locale: Locale = 'ru'): SeatResult {
   const active = answered(questions, answers, weights)
   const score = Object.fromEntries(parties.map((party) => [party.id, 0]))
   for (const question of active) {
@@ -371,10 +440,10 @@ export function simulate(answers: Answers, weights: Weights = defaultWeights()):
     .slice()
     .sort((a, b) => closeness[b.id] - closeness[a.id] || b.poll - a.poll)[0].id
 
-  const scenarios = buildScenarios(seats)
+  const scenarios = buildScenarios(seats, locale)
   const primaryId = pickPrimary(scenarios, closestId)
   const primary = scenarios.find((item) => item.id === primaryId) ?? null
-  const text = narrate(scenarios, primaryId)
+  const text = narrate(scenarios, primaryId, locale)
   const cabinet = primary && primary.total >= MAJORITY && primary.outside.length === 0
     ? buildCabinet(primary.ids, seats, primary.pm)
     : null
@@ -404,6 +473,6 @@ export function pollSeats() {
   return Object.fromEntries(parties.map((party) => [party.id, party.poll]))
 }
 
-export function formatPct(value: number) {
-  return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value * 100)
+export function formatPct(value: number, locale: Locale = 'ru') {
+  return new Intl.NumberFormat(numberLocale(locale), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value * 100)
 }

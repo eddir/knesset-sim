@@ -11,6 +11,11 @@
         var theme = localStorage.getItem('knesset-theme')
         if (theme === 'dark' || (!theme && matchMedia('(prefers-color-scheme: dark)').matches))
           document.documentElement.classList.add('dark')
+        var lang = localStorage.getItem('knesset-lang')
+        if (lang === 'en' || lang === 'he' || lang === 'ru') {
+          document.documentElement.lang = lang
+          if (lang === 'he') document.documentElement.dir = 'rtl'
+        }
       } catch (e) {}
     </script>
   </head>

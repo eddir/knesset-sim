@@ -1,4 +1,5 @@
 import { groupsFrom, HEMICYCLE, SEAT_RADIUS, seatPoints, type SeatGroup } from '@/hemicycle'
+import { partyName, useI18n } from '@/i18n'
 
 type Seat = { id: string; color: string; name: string }
 
@@ -23,6 +24,7 @@ export function Hemicycle({
   }
 
   return (
+    <div dir="ltr">
     <svg viewBox={`0 0 ${HEMICYCLE.width} ${HEMICYCLE.height}`} role="img" aria-label={`${label}, ${sub}`} className="w-full">
       {seatPoints.map((point, index) => {
         const seat = assigned[index] ?? { id: '', color: 'var(--muted)', name: '' }
@@ -68,14 +70,16 @@ export function Hemicycle({
         {sub}
       </text>
     </svg>
+    </div>
   )
 }
 
 export function StackedBar({ seats }: { seats: Record<string, number> }) {
-  const groups = groupsFrom(seats)
+  const { locale } = useI18n()
+  const groups = groupsFrom(seats).map((group) => ({ ...group, name: partyName(locale, group.id) }))
   const total = groups.reduce((sum, group) => sum + group.seats, 0) || 1
   return (
-    <div className="flex h-3 overflow-hidden rounded-full bg-muted" aria-hidden>
+    <div dir="ltr" className="flex h-3 overflow-hidden rounded-full bg-muted" aria-hidden>
       {groups.map((group) => (
         <div key={group.id} style={{ width: `${(group.seats / total) * 100}%`, background: group.color }} title={`${group.name}: ${group.seats}`} />
       ))}

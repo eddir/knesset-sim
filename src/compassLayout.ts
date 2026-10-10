@@ -36,14 +36,14 @@ function reserve(occupied: CompassBox[], box: CompassBox) {
   occupied.push(box)
 }
 
-export function placeCompassLabels(dots: Dot[], you: { px: number; py: number } | null, size: number): CompassLabel[] {
+export function placeCompassLabels(dots: Dot[], you: { px: number; py: number } | null, size: number, youLabel = 'Вы'): CompassLabel[] {
   const occupied: CompassBox[] = []
   for (const dot of dots) reserve(occupied, { x0: dot.px - 8, y0: dot.py - 8, x1: dot.px + 8, y1: dot.py + 8 })
   if (you) reserve(occupied, { x0: you.px - 11, y0: you.py - 11, x1: you.px + 11, y1: you.py + 11 })
   reserve(occupied, { x0: size / 2 - 78, y0: 0, x1: size / 2 + 78, y1: 22 })
   reserve(occupied, { x0: size / 2 - 92, y0: size - 20, x1: size / 2 + 92, y1: size })
-  reserve(occupied, { x0: 0, y0: size / 2 - 78, x1: 20, y1: size / 2 + 78 })
-  reserve(occupied, { x0: size - 20, y0: size / 2 - 78, x1: size, y1: size / 2 + 78 })
+  reserve(occupied, { x0: 0, y0: size / 2 - 90, x1: 30, y1: size / 2 + 90 })
+  reserve(occupied, { x0: size - 30, y0: size / 2 - 90, x1: size, y1: size / 2 + 90 })
 
   function take(id: string, text: string, px: number, py: number, preferEnd: boolean): CompassLabel {
     const width = text.length * CHAR + 2
@@ -66,7 +66,7 @@ export function placeCompassLabels(dots: Dot[], you: { px: number; py: number } 
   }
 
   const labels: CompassLabel[] = []
-  if (you) labels.push(take('user', 'Вы', you.px, you.py, false))
+  if (you) labels.push(take('user', youLabel, you.px, you.py, false))
   const ordered = dots.slice().sort((a, b) => a.px - b.px || a.py - b.py)
   for (const dot of ordered) {
     labels.push(take(dot.id, shortName(dot.name), dot.px, dot.py, dot.px > size * 0.58))

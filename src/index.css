@@ -139,3 +139,11 @@
   font-family: 'Noto Sans Hebrew', 'Manrope', sans-serif;
   unicode-bidi: isolate;
 }
+
+html[lang='he'] body {
+  font-family: 'Noto Sans Hebrew', 'Manrope', sans-serif;
+}
+
+html[lang='he'] .font-heading {
+  font-family: 'Noto Sans Hebrew', 'Literata', serif;
+}
