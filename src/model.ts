@@ -1,3 +1,4 @@
+import { bills } from './bills'
 import {
   blocs,
   canBePm,
@@ -102,16 +103,20 @@ function shares(question: Question, value: number) {
   return raw.map((item) => (sum ? item / sum : 0))
 }
 
-export function vetoed(ids: string[]) {
+export function vetoClash(ids: string[]): [string, string] | null {
   for (let i = 0; i < ids.length; i += 1) {
     for (let j = i + 1; j < ids.length; j += 1) {
-      const pair = vetoPairs.some(
+      const hit = vetoPairs.some(
         ([a, b]) => (a === ids[i] && b === ids[j]) || (b === ids[i] && a === ids[j]),
       )
-      if (pair) return true
+      if (hit) return [ids[i], ids[j]]
     }
   }
-  return false
+  return null
+}
+
+export function vetoed(ids: string[]) {
+  return vetoClash(ids) !== null
 }
 
 export function primeMinister(ids: string[], seats: Record<string, number>) {
@@ -378,9 +383,9 @@ function compassOf(weights: Weights, pick: (question: Question) => number | null
   }
 }
 
-function buildCabinet(ids: string[], seats: Record<string, number>, pm: string | null) {
+function buildCabinet(ids: string[], seats: Record<string, number>, pm: string | null, allowAll = false) {
   if (!pm) return null
-  const members = ids.filter((id) => partyById(id).cabinet && (seats[id] ?? 0) > 0)
+  const members = ids.filter((id) => (allowAll || partyById(id).cabinet) && (seats[id] ?? 0) > 0)
   if (!members.length) return null
   const load = new Map<string, number>()
   const assigned: { post: string; partyId: string }[] = [{ post: 'pm', partyId: pm }]
@@ -397,8 +402,36 @@ function buildCabinet(ids: string[], seats: Record<string, number>, pm: string |
   return assigned
 }
 
-export function simulate(answers: Answers, weights: Weights = defaultWeights(), locale: Locale = 'ru'): SeatResult {
-  const active = answered(questions, answers, weights)
+/** Кабинет для коалиции, которую собрал сам отвечающий. Списки вне обычных сценариев тоже получают портфели. */
+export function cabinetOf(ids: string[], seats: Record<string, number>) {
+  const present = ids.filter((id) => (seats[id] ?? 0) > 0)
+  if (!present.length || vetoed(present)) return null
+  return buildCabinet(present, seats, primeMinister(present, seats), true)
+}
+
+function themeMass(themeId: string, weights: Weights) {
+  const count = questions.filter((question) => question.theme === themeId).length
+  return themeWeight(weights, themeId) * Math.max(count, 1)
+}
+
+/** Сколько мест из 120 уже разыграно темами из списка. Полный тест даёт ровно 120. */
+export function seatBudget(weights: Weights, themeIds: string[]) {
+  const active = themes.filter((theme) => themeWeight(weights, theme.id) > 0)
+  const all = active.reduce((sum, theme) => sum + themeMass(theme.id, weights), 0)
+  if (!all) return 0
+  const done = themeIds.reduce((sum, id) => sum + themeMass(id, weights), 0)
+  return Math.max(0, Math.min(SEAT_COUNT, Math.round((SEAT_COUNT * done) / all)))
+}
+
+export function simulate(
+  answers: Answers,
+  weights: Weights = defaultWeights(),
+  locale: Locale = 'ru',
+  themeIds?: string[],
+): SeatResult {
+  const source = themeIds ? questions.filter((question) => themeIds.includes(question.theme)) : questions
+  const budget = themeIds ? seatBudget(weights, themeIds) : SEAT_COUNT
+  const active = answered(source, answers, weights)
   const score = Object.fromEntries(parties.map((party) => [party.id, 0]))
   for (const question of active) {
     const value = answers[question.id]
@@ -420,7 +453,7 @@ export function simulate(answers: Answers, weights: Weights = defaultWeights(), 
     eligible = parties.map((party) => party.id === leader.id)
   }
   const voteWeights = parties.map((party, index) => (eligible[index] ? score[party.id] : 0))
-  const allocated = dhondt(voteWeights, SEAT_COUNT)
+  const allocated = dhondt(voteWeights, budget)
   const seats = Object.fromEntries(parties.map((party, index) => [party.id, allocated[index]]))
 
   const closeness: Record<string, number> = {}
@@ -475,4 +508,94 @@ export function pollSeats() {
 
 export function formatPct(value: number, locale: Locale = 'ru') {
   return new Intl.NumberFormat(numberLocale(locale), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value * 100)
+}
+
+export function nearestParty(question: Question, value: number) {
+  return parties.slice().sort((a, b) => {
+    const left = Math.abs(value - (question.stance[a.id] ?? 0))
+    const right = Math.abs(value - (question.stance[b.id] ?? 0))
+    return left - right || b.poll - a.poll
+  })[0].id
+}
+
+export function themeAxis(themeId: string, answers: Answers) {
+  const list = questions.filter((question) => question.theme === themeId)
+  const numeric = list.filter((question) => typeof answers[question.id] === 'number')
+  const user = numeric.length
+    ? numeric.reduce((sum, question) => sum + (answers[question.id] as number), 0) / numeric.length
+    : null
+  const positions = Object.fromEntries(parties.map((party) => {
+    const average = list.reduce((sum, question) => sum + (question.stance[party.id] ?? 0), 0) / (list.length || 1)
+    return [party.id, average]
+  }))
+  return { user, positions, answered: numeric.length }
+}
+
+export function themeShares(answers: Answers, weights: Weights) {
+  return themes.map((theme) => {
+    const list = answered(questions.filter((question) => question.theme === theme.id), answers, weights)
+    const score = Object.fromEntries(parties.map((party) => [party.id, 0]))
+    if (!list.length) return { themeId: theme.id, shares: score, answered: 0 }
+    for (const question of list) {
+      const value = answers[question.id]
+      if (value == null) continue
+      shares(question, value).forEach((share, index) => {
+        score[parties[index].id] += share
+      })
+    }
+    const total = Object.values(score).reduce((sum, value) => sum + value, 0) || 1
+    return {
+      themeId: theme.id,
+      answered: list.length,
+      shares: Object.fromEntries(parties.map((party) => [party.id, score[party.id] / total])),
+    }
+  })
+}
+
+export type BillTally = {
+  id: string
+  yes: number
+  no: number
+  abstain: number
+  passed: boolean
+  yesIds: string[]
+  noIds: string[]
+  holdIds: string[]
+}
+
+export function userBillLean(questionId: string, side: -1 | 1, answers: Answers): 'yes' | 'no' | 'hold' | null {
+  const value = answers[questionId]
+  if (typeof value !== 'number') return null
+  const lean = value * side
+  if (lean > 0.15) return 'yes'
+  if (lean < -0.15) return 'no'
+  return 'hold'
+}
+
+export function billTallies(seats: Record<string, number>): BillTally[] {
+  return bills.map((bill) => {
+    const question = questions.find((item) => item.id === bill.questionId)
+    let yes = 0
+    let no = 0
+    let abstain = 0
+    const yesIds: string[] = []
+    const noIds: string[] = []
+    const holdIds: string[] = []
+    for (const party of parties) {
+      const count = seats[party.id] ?? 0
+      if (!count || !question) continue
+      const lean = (question.stance[party.id] ?? 0) * bill.side
+      if (lean > 0.15) {
+        yes += count
+        yesIds.push(party.id)
+      } else if (lean < -0.15) {
+        no += count
+        noIds.push(party.id)
+      } else {
+        abstain += count
+        holdIds.push(party.id)
+      }
+    }
+    return { id: bill.id, yes, no, abstain, passed: yes >= MAJORITY, yesIds, noIds, holdIds }
+  })
 }

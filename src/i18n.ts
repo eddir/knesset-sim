@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react'
+import { bills } from './bills'
 import { parties, partyById, questions, themes, posts } from './data'
 
 export type Locale = 'ru' | 'en' | 'he'
@@ -21,9 +22,16 @@ export function saveLocale(locale: Locale) {
   localStorage.setItem(LANG_KEY, locale)
 }
 
+function ruSeats(seats: number) {
+  const mod10 = seats % 10
+  const mod100 = seats % 100
+  const word = mod10 === 1 && mod100 !== 11 ? 'место' : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? 'места' : 'мест'
+  return `${seats} ${word}`
+}
+
 type PartyBits = { name: string; leader: string }
 type QuestionBits = { title: string; a: string; b: string }
-type ThemeBits = { name: string; hint: string }
+type ThemeBits = { name: string; hint: string; lo: string; hi: string }
 
 const enParties: Record<string, PartyBits> = {
   joint: { name: 'Joint List', leader: 'Yousef Jabareen' },
@@ -55,208 +63,24 @@ const heLeaders: Record<string, string> = {
   otzma: 'איתמר בן גביר',
 }
 
-const enQuestions: Record<string, QuestionBits> = {
-  gaza: {
-    title: 'The war in Gaza',
-    a: "Keep going until Hamas's military wing is dismantled",
-    b: 'Stop the war for a deal and a civilian administration without Hamas',
-  },
-  hostages: {
-    title: 'The hostages',
-    a: 'Military pressure first, even if a swap is delayed',
-    b: 'A release deal matters more than continuing the operation',
-  },
-  iran: {
-    title: 'Iran',
-    a: 'Israel may strike the nuclear program even without the United States',
-    b: 'Only with Washington, and only after diplomacy is exhausted',
-  },
-  settlements: {
-    title: 'Settlements',
-    a: 'Build and legally entrench settlements in Judea and Samaria',
-    b: 'Freeze the expansion of settlements',
-  },
-  twostate: {
-    title: 'A Palestinian state',
-    a: 'There will not be one: no second state west of the Jordan',
-    b: 'Two states remain the horizon if there is a security partner',
-  },
-  after: {
-    title: 'Gaza after Hamas',
-    a: 'Israeli security control for years, with no Palestinian administration',
-    b: 'Civilian rule by Arab states or a reformed Palestinian administration',
-  },
-  annex: {
-    title: 'Sovereignty',
-    a: 'Extend Israeli sovereignty to Judea and Samaria',
-    b: 'Do not annex a territory where millions of Palestinians have no citizenship',
-  },
-  court: {
-    title: 'The Supreme Court',
-    a: 'An override clause: the Knesset may cancel a court ruling',
-    b: 'The court remains a check on majority power',
-  },
-  pm: {
-    title: 'Who forms the government',
-    a: 'Benjamin Netanyahu should assemble the next cabinet',
-    b: 'After October 7 the prime minister should be someone else',
-  },
-  inquiry: {
-    title: 'The October 7 commission',
-    a: 'An internal army review is enough. No state commission is needed',
-    b: 'An independent state commission with real powers is needed',
-  },
-  draft: {
-    title: 'Drafting Haredim',
-    a: 'Yeshiva students still do not join the army',
-    b: 'Service, or the loss of benefits and yeshiva funding',
-  },
-  shabbat: {
-    title: 'The rabbinate and Shabbat',
-    a: 'Marriage, kashrut and Shabbat stay with the Chief Rabbinate',
-    b: 'Civil marriage and public transport on Shabbat',
-  },
-  yeshiva: {
-    title: 'Yeshiva money',
-    a: 'Keep yeshiva budgets and child allowances for large Haredi families',
-    b: 'Tie transfers to work and to a secular core in school',
-  },
-  prices: {
-    title: 'Prices',
-    a: 'Cut taxes and regulation, even if support for the poor shrinks',
-    b: 'Subsidies, price controls and a thicker social budget',
-  },
-  budget: {
-    title: 'The budget after the war',
-    a: 'Military spending comes first. The deficit can grow',
-    b: 'Put money back into housing, hospitals and schools',
-  },
-  housing: {
-    title: 'Housing',
-    a: 'The market will bring prices down: faster permits and less rent control',
-    b: 'A rent cap and a large stock of public housing',
-  },
-  arab: {
-    title: 'Arab parties in the cabinet',
-    a: 'A government made only of Zionist lists',
-    b: 'Arab parties can be coalition partners',
-  },
-  nation: {
-    title: 'The Nation-State Law',
-    a: 'Keep it strict: Israel is first the state of the Jewish people',
-    b: 'Soften it so Arab citizens have equal status',
-  },
-}
-
-const heQuestions: Record<string, QuestionBits> = {
-  gaza: {
-    title: 'המלחמה בעזה',
-    a: 'להמשיך עד לפירוק הזרוע הצבאית של חמאס',
-    b: 'לעצור את המלחמה תמורת עסקה וממשל אזרחי בלי חמאס',
-  },
-  hostages: {
-    title: 'החטופים',
-    a: 'קודם לחץ צבאי, גם אם עסקת החזרה מתעכבת',
-    b: 'עסקת שחרור חשובה יותר מהמשך המבצע',
-  },
-  iran: {
-    title: 'איראן',
-    a: 'ישראל רשאית לתקוף את תוכנית הגרעין גם בלי ארה״ב',
-    b: 'רק יחד עם וושינגטון, ואחרי שמיצו את הדיפלומטיה',
-  },
-  settlements: {
-    title: 'התנחלויות',
-    a: 'לבנות ולעגן בחוק התנחלויות ביהודה ושומרון',
-    b: 'להקפיא את הרחבת ההתנחלויות',
-  },
-  twostate: {
-    title: 'מדינה פלסטינית',
-    a: 'לא תהיה: אין מדינה שנייה ממערב לירדן',
-    b: 'שתי מדינות נשארות האופק, אם יהיה שותף ביטחוני',
-  },
-  after: {
-    title: 'עזה אחרי חמאס',
-    a: 'שליטה ביטחונית ישראלית לשנים, בלי ממשל פלסטיני',
-    b: 'שלטון אזרחי של מדינות ערב או של רשות פלסטינית מחודשת',
-  },
-  annex: {
-    title: 'ריבונות',
-    a: 'להחיל את ריבונות ישראל על יהודה ושומרון',
-    b: 'לא לספח שטח שבו מיליוני פלסטינים בלי אזרחות',
-  },
-  court: {
-    title: 'בית המשפט העליון',
-    a: 'פסקת התגברות: הכנסת יכולה לבטל פסיקה',
-    b: 'בית המשפט נשאר בלם על שלטון הרוב',
-  },
-  pm: {
-    title: 'מי מרכיב את הממשלה',
-    a: 'את הממשלה הבאה צריך להרכיב בנימין נתניהו',
-    b: 'אחרי 7 באוקטובר ראש הממשלה צריך להיות מישהו אחר',
-  },
-  inquiry: {
-    title: 'ועדת חקירה ל־7 באוקטובר',
-    a: 'די בבדיקה פנימית של הצבא, בלי ועדת חקירה ממלכתית',
-    b: 'צריך ועדת חקירה ממלכתית עצמאית עם סמכויות',
-  },
-  draft: {
-    title: 'גיוס חרדים',
-    a: 'תלמידי ישיבות עדיין לא הולכים לצבא',
-    b: 'שירות, או אובדן הטבות ותקציב הישיבות',
-  },
-  shabbat: {
-    title: 'הרבנות ושבת',
-    a: 'נישואים, כשרות ושבת נשארים אצל הרבנות הראשית',
-    b: 'נישואים אזרחיים ותחבורה ציבורית בשבת',
-  },
-  yeshiva: {
-    title: 'כסף לישיבות',
-    a: 'לשמור על תקציבי הישיבות וקצבאות למשפחות חרדיות ברוכות ילדים',
-    b: 'לקשור העברות לעבודה ולליבה חילונית בבית הספר',
-  },
-  prices: {
-    title: 'מחירים',
-    a: 'להוריד מסים ורגולציה, גם אם התמיכה בעניים תצטמצם',
-    b: 'סובסידיות, פיקוח מחירים ותקציב חברתי עבה יותר',
-  },
-  budget: {
-    title: 'התקציב אחרי המלחמה',
-    a: 'ההוצאה הצבאית קודמת, אפשר להגדיל את הגירעון',
-    b: 'להחזיר כסף לדיור, לבתי חולים ולבתי ספר',
-  },
-  housing: {
-    title: 'דיור',
-    a: 'השוק יוריד מחירים: היתרים מהר יותר ופחות פיקוח על שכירות',
-    b: 'תקרת שכירות ומלאי גדול של דיור ציבורי',
-  },
-  arab: {
-    title: 'מפלגות ערביות בממשלה',
-    a: 'ממשלה רק מרשימות ציוניות',
-    b: 'מפלגות ערביות יכולות להיות שותפות קואליציה',
-  },
-  nation: {
-    title: 'חוק הלאום',
-    a: 'להשאיר אותו נוקשה: ישראל היא קודם מדינת העם היהודי',
-    b: 'לרכך אותו למען מעמד שווה לאזרחים הערבים',
-  },
-}
-
 const enThemes: Record<string, ThemeBits> = {
-  security: { name: 'War and deterrence', hint: 'Gaza, the hostages, Iran' },
-  land: { name: 'Territory', hint: 'Settlements, Gaza after the war, annexation' },
-  power: { name: 'Power and the court', hint: 'Netanyahu, the Supreme Court, a commission' },
-  faith: { name: 'Religion and the draft', hint: 'Haredim, Shabbat, yeshiva budgets' },
-  money: { name: 'Money', hint: 'Prices, housing, the war budget' },
-  citizens: { name: 'Citizens', hint: 'Arab parties and the Nation-State Law' },
+  security: { name: 'War and deterrence', hint: 'Gaza, the north, the hostages, Iran', lo: 'Hard force', hi: 'A deal and a pause' },
+  land: { name: 'Territory', hint: 'Settlements, Jerusalem, Gaza after the war', lo: 'Control and sovereignty', hi: 'Separation' },
+  power: { name: 'Power and the court', hint: 'Netanyahu, the Supreme Court, the police', lo: 'Majority power', hi: 'Checks and the court' },
+  faith: { name: 'Religion and the draft', hint: 'Haredim, Shabbat, the rabbinate', lo: 'The rabbinate’s status quo', hi: 'Secular rules' },
+  money: { name: 'Money', hint: 'Prices, housing, taxes', lo: 'The market and low taxes', hi: 'A social budget' },
+  citizens: { name: 'Citizens', hint: 'Arab citizens, equality, the Nation-State Law', lo: 'A Jewish state', hi: 'Equal status' },
+  world: { name: 'Foreign policy', hint: 'The US, the accords, the rules after the election', lo: 'Self-reliance', hi: 'Alliances and norms' },
 }
 
 const heThemes: Record<string, ThemeBits> = {
-  security: { name: 'מלחמה והרתעה', hint: 'עזה, חטופים, איראן' },
-  land: { name: 'שטח', hint: 'התנחלויות, עזה אחרי המלחמה, סיפוח' },
-  power: { name: 'שלטון ובית המשפט', hint: 'נתניהו, בג״ץ, ועדת חקירה' },
-  faith: { name: 'דת וגיוס', hint: 'חרדים, שבת, תקציבי ישיבות' },
-  money: { name: 'הכיס', hint: 'מחירים, דיור, תקציב הביטחון' },
-  citizens: { name: 'אזרחים', hint: 'מפלגות ערביות וחוק הלאום' },
+  security: { name: 'מלחמה והרתעה', hint: 'עזה, הצפון, חטופים, איראן', lo: 'כוח קשיח', hi: 'עסקה והפוגה' },
+  land: { name: 'שטח', hint: 'התנחלויות, ירושלים, עזה אחרי המלחמה', lo: 'שליטה וריבונות', hi: 'היפרדות' },
+  power: { name: 'שלטון ובית המשפט', hint: 'נתניהו, בג״ץ, המשטרה', lo: 'שלטון הרוב', hi: 'בלמים ובית המשפט' },
+  faith: { name: 'דת וגיוס', hint: 'חרדים, שבת, הרבנות', lo: 'הסטטוס קוו של הרבנות', hi: 'כללים חילוניים' },
+  money: { name: 'הכיס', hint: 'מחירים, דיור, מסים', lo: 'שוק ומסים נמוכים', hi: 'תקציב חברתי' },
+  citizens: { name: 'אזרחים', hint: 'אזרחים ערבים, שוויון, חוק הלאום', lo: 'מדינה יהודית', hi: 'מעמד שווה' },
+  world: { name: 'מדיניות חוץ', hint: 'ארה״ב, ההסכמים, הכללים אחרי הבחירות', lo: 'הישענות על עצמנו', hi: 'בריתות ונורמות' },
 }
 
 const enPosts: Record<string, string> = {
@@ -354,6 +178,42 @@ export function partyLeader(locale: Locale, id: string) {
   return partyById(id).leader
 }
 
+const enAbout: Record<string, string> = {
+  joint: 'Hadash, Ta\'al and Balad. In the autumn 2026 polls the list is led by Yousef Jabareen. It usually stays out of the cabinet.',
+  democrats: 'The heirs of Labor and Meretz. The left flank of the Zionist opposition, led by Yair Golan.',
+  raam: 'Mansour Abbas\'s Islamist list. In 2021 it joined the Bennett-Lapid coalition.',
+  yashar: 'A centrist list led by former chief of staff Gadi Eisenkot. In the autumn 2026 polls it runs level with Likud.',
+  byachad: 'Together, Naftali Bennett\'s party. To the right of Yashar, and against Netanyahu\'s return in this cycle.',
+  yb: 'Avigdor Lieberman\'s party: hard security, and an equally hard refusal to keep Haredim out of the army.',
+  likud: 'The governing party. The list is led by Benjamin Netanyahu, prime minister of the dissolved 25th Knesset.',
+  amcha: 'A right-wing list led by reserve general Ofer Winter. Some reports call it Am Yisrael. In the early-October polling average it is below the threshold.',
+  shas: 'Aryeh Deri\'s Sephardi Haredi party: benefits for its voters and an alliance with Netanyahu.',
+  utj: 'The Ashkenazi Haredi list. It has no prime-ministerial candidate. Autumn 2026 polls tie it to Yaakov Asher.',
+  rz: 'Bezalel Smotrich\'s list with Zehut: settlements, sovereignty in Judea and Samaria, religious Zionism.',
+  otzma: 'Itamar Ben-Gvir\'s party. The far right: settlements, the police, and the war until Hamas is dismantled.',
+}
+
+const heAbout: Record<string, string> = {
+  joint: 'חד״ש, תע״ל ובל״ד. בסקרים של סתיו 2026 בראש הרשימה יוסף ג׳בארין. בדרך כלל לא נכנסת לממשלה.',
+  democrats: 'יורשות העבודה ומרצ. האגף השמאלי של האופוזיציה הציונית, בראשות יאיר גולן.',
+  raam: 'הרשימה האסלאמית של מנסור עבאס. ב־2021 כבר נכנסה לקואליציה של בנט ולפיד.',
+  yashar: 'רשימת מרכז של הרמטכ״ל לשעבר גדי איזנקוט. בסתיו 2026 היא הולכת ראש בראש עם הליכוד.',
+  byachad: '«ביחד», מפלגתו של נפתלי בנט. ימינה מישר, ובמחזור הזה נגד חזרת נתניהו.',
+  yb: 'מפלגתו של אביגדור ליברמן: ביטחון קשוח וסירוב קשוח באותה מידה לשמור על פטור לחרדים.',
+  likud: 'מפלגת השלטון. בראש הרשימה בנימין נתניהו, ראש ממשלת הכנסת ה־25 שפוזרה.',
+  amcha: 'רשימת ימין של האלוף במילואים עופר וינטר. בחלק מהדיווחים קוראים לה «עמך ישראל». בממוצע הסקרים מתחילת אוקטובר היא מתחת לאחוז החסימה.',
+  shas: 'מפלגת החרדים הספרדית של אריה דרעי: קצבאות לבוחריה וברית עם נתניהו.',
+  utj: 'הרשימה החרדית האשכנזית. אין לה מועמד לראשות הממשלה. בסתיו 2026 קושרים אותה ליעקב אשר.',
+  rz: 'רשימתו של בצלאל סמוטריץ׳ עם זהות: התנחלויות, ריבונות ביהודה ושומרון, ציונות דתית.',
+  otzma: 'מפלגתו של איתמר בן־גביר. ימין קיצוני: התנחלויות, משטרה והמשך המלחמה עד פירוק חמאס.',
+}
+
+export function partyAbout(locale: Locale, id: string) {
+  if (locale === 'en') return enAbout[id] ?? partyById(id).about
+  if (locale === 'he') return heAbout[id] ?? partyById(id).about
+  return partyById(id).about
+}
+
 export function leaderOf(locale: Locale, id: string | null) {
   if (!id) return locale === 'he' ? 'אין מועמד' : locale === 'en' ? 'no one' : 'некому'
   return partyLeader(locale, id)
@@ -361,18 +221,22 @@ export function leaderOf(locale: Locale, id: string | null) {
 
 export function questionText(locale: Locale, id: string): QuestionBits {
   const source = questions.find((item) => item.id === id)
-  const fallback = { title: source?.title ?? id, a: source?.a ?? '', b: source?.b ?? '' }
-  if (locale === 'en') return enQuestions[id] ?? fallback
-  if (locale === 'he') return heQuestions[id] ?? fallback
-  return fallback
+  if (!source) return { title: id, a: '', b: '' }
+  return { title: source.title[locale], a: source.a[locale], b: source.b[locale] }
 }
 
 export function themeText(locale: Locale, id: string): ThemeBits {
   const source = themes.find((item) => item.id === id)
-  const fallback = { name: source?.name ?? id, hint: source?.hint ?? '' }
+  const fallback = { name: source?.name ?? id, hint: source?.hint ?? '', lo: source?.lo ?? '', hi: source?.hi ?? '' }
   if (locale === 'en') return enThemes[id] ?? fallback
   if (locale === 'he') return heThemes[id] ?? fallback
   return fallback
+}
+
+export function billText(locale: Locale, id: string) {
+  const bill = bills.find((item) => item.id === id)
+  if (!bill) return { title: id, body: '' }
+  return { title: bill.title[locale], body: bill.body[locale] }
 }
 
 export function postName(locale: Locale, id: string) {
@@ -402,7 +266,60 @@ type Ui = {
   language: string
   date: string
   introTitle: string
-  introLead: string
+  introLead: (count: number) => string
+  next: string
+  sliderUnset: string
+  sliderMid: string
+  sliderSlight: (side: string) => string
+  sliderClear: (side: string) => string
+  sliderFull: (side: string) => string
+  sectionKicker: (current: number, total: number) => string
+  sectionTitle: (name: string, seats: number) => string
+  seatsAtStake: (seats: number) => string
+  sectionNext: (name: string) => string
+  sectionDone: string
+  sectionMajority: (name: string) => string
+  sectionAhead: (name: string) => string
+  sectionKeeps: (name: string) => string
+  sectionTakes: (name: string) => string
+  sectionLeft: (seats: number) => string
+  distributed: (done: number, total: number) => string
+  majorityMark: string
+  onTheme: string
+  wikiTitle: string
+  wikiLead: string
+  wikiElection: string
+  wikiWhen: string
+  wikiByAnswers: string
+  wikiHall: (seats: number) => string
+  wikiNeed: (seats: number) => string
+  wikiConst: (seats: number) => string
+  wikiLeader: string
+  wikiParty: string
+  wikiWon: string
+  wikiShare: string
+  wikiPolls: string
+  wikiOthers: string
+  wikiSystem: string
+  wikiSystemValue: string
+  wikiBarrier: string
+  wikiCaption: string
+  wikiNone: string
+  themeShareTitle: string
+  themeShareLead: string
+  billsTitle: string
+  billsLead: string
+  billPass: string
+  billFail: string
+  billYes: string
+  billNo: string
+  billHold: string
+  stripsTitle: string
+  stripsLead: string
+  byQuestion: (count: number) => string
+  closestTag: string
+  noOpinion: string
+  youMark: string
   seatsShort: string
   thresholdShort: string
   majorityShort: string
@@ -451,8 +368,21 @@ type Ui = {
   whereLead: string
   copy: string
   copied: string
+  saveImage: string
   editAnswers: string
   restart: string
+  originalBefore: string
+  originalName: string
+  ownCoalition: string
+  ownCoalitionLead: string
+  ownEmpty: string
+  ownSeats: (seats: number, total: number) => string
+  ownMajority: string
+  ownShort: (gap: number) => string
+  ownConst: string
+  ownVeto: (left: string, right: string) => string
+  billSides: string
+  billYou: (side: 'yes' | 'no' | 'hold') => string
   disclaimer: string
   shareText: (lines: string, verdict: string) => string
   compassAria: string
@@ -476,6 +406,7 @@ export const ui: Record<Locale, Ui> = {
       'Мандаты делятся методом Бадера-Офера: это метод д’Ондта. Каждый следующий мандат забирает список с наибольшим частным «голоса / (уже полученные места + 1)».',
       'Правительству нужны 61 голос. Соглашения об излишках между списками здесь не включены. Отказы сидеть в одном кабинете заданы по линиям кампании 2026 года: это редакционная оценка, не юридический запрет.',
       'Ваши ответы не выбирают одну партию. Они собирают Кнессет так, как если бы страна ответила так же. Близкие списки делят голоса, далёкие проваливаются под барьер.',
+      'Вопросы разбиты на разделы. Раздел с весом «не важно» пропускается. Остальные идут от менее важных к более важным. После каждого раздела места, которые уже разыграны, показываются в зале. В конце отчёт разбирает коалиции, законопроекты и каждый ответ.',
       'Цифры опросов на первом экране - округлённое среднее опубликованных мандатных прогнозов начала октября 2026 года. «Народ Израиля» Офера Винтера в этом среднем ниже барьера.',
     ],
     close: 'Закрыть',
@@ -484,7 +415,7 @@ export const ui: Record<Locale, Ui> = {
     language: 'Язык',
     date: '27 октября 2026',
     introTitle: 'Соберите Кнессет своими ответами',
-    introLead: 'Восемнадцать вопросов про Газу, суд, призыв харедим и то, кто должен быть премьером. На выходе 120 мандатов, барьер 3,25% и проверка, собирается ли кабинет на 61 место.',
+    introLead: (count) => `${count} вопросов в семи разделах: война, территория, суд, религия, кошелёк, граждане и внешняя политика. После каждого раздела зал показывает, сколько мест уже разыграно. В конце подробный отчёт: 120 мандатов, барьер 3,25% и проверка кабинета на 61.`,
     seatsShort: 'мест',
     thresholdShort: 'барьер',
     majorityShort: 'для кабинета',
@@ -495,7 +426,7 @@ export const ui: Record<Locale, Ui> = {
     figcaption: 'Ликуд и Яшар по 23. РААМ и Объединённый список держат отдельный карман мандатов.',
     step: 'Шаг 1',
     weightsTitle: 'Что для вас решает выборы',
-    weightsLead: 'Тема с весом «не важно» не влияет на мандаты. По умолчанию все шесть одинаково важны.',
+    weightsLead: '«Не важно» пропускает раздел целиком. Остальные идут от менее важных к более важным, и после каждого зал обновляется. По умолчанию все темы одинаково важны.',
     weights: ['Не важно', 'Слабо', 'Важно', 'Решающе'],
     toQuestions: 'К вопросам',
     questionOf: (current, total) => `Вопрос ${current} из ${total}`,
@@ -505,7 +436,60 @@ export const ui: Record<Locale, Ui> = {
     choices: ['Первый', 'Скорее первый', 'Середина', 'Скорее второй', 'Второй'],
     back: 'Назад',
     skip: 'Пропустить',
-    keysHint: 'Клавиши 1–5, 0 пропуск, Backspace назад.',
+    next: 'Дальше',
+    sliderUnset: 'Сдвиньте ползунок к варианту, который вам ближе',
+    sliderMid: 'Ровно посередине',
+    sliderSlight: (side) => `Немного ближе к ${side}`,
+    sliderClear: (side) => `Заметно ближе к ${side}`,
+    sliderFull: (side) => `Полностью за ${side}`,
+    sectionKicker: (current, total) => `Раздел ${current} из ${total}`,
+    sectionTitle: (name, seats) => `«${name}» раздаёт ${ruSeats(seats)}`,
+    seatsAtStake: (seats) => `${ruSeats(seats)} на кону`,
+    sectionNext: (name) => `Дальше: ${name}`,
+    sectionDone: 'Показать мой Кнессет',
+    sectionMajority: (name) => `${name}: абсолютное большинство`,
+    sectionAhead: (name) => `${name} выходит вперёд`,
+    sectionKeeps: (name) => `${name} сохраняет лидерство`,
+    sectionTakes: (name) => `${name} перехватывает лидерство`,
+    sectionLeft: (seats) => `Впереди ещё ${seats}`,
+    distributed: (done, total) => `Распределено ${done} из ${total}`,
+    majorityMark: 'Абсолютное большинство: 61',
+    onTheme: 'По ответам в этом разделе',
+    wikiTitle: 'Итоги выборов',
+    wikiLead: 'Карточка в оформлении Википедии. Её удобно сохранить снимком экрана.',
+    wikiElection: 'Выборы в Кнессет',
+    wikiWhen: '27 октября 2026',
+    wikiByAnswers: 'по ответам на тест',
+    wikiHall: (seats) => `Все ${ruSeats(seats)} в Кнессете`,
+    wikiNeed: (seats) => `Для большинства необходимо ${ruSeats(seats)}`,
+    wikiConst: (seats) => `Конституционное большинство: ${seats}`,
+    wikiLeader: 'Лидер',
+    wikiParty: 'Партия',
+    wikiWon: 'Мест получено',
+    wikiShare: 'Доля мест',
+    wikiPolls: 'Опросы',
+    wikiOthers: 'Остальные',
+    wikiSystem: 'Система',
+    wikiSystemValue: 'Один округ, закрытые списки',
+    wikiBarrier: 'Барьер',
+    wikiCaption: 'Распределение мест по итогам теста',
+    wikiNone: 'Кабинет на 61 не собран',
+    themeShareTitle: 'Голоса по разделам',
+    themeShareLead: 'Доля каждого списка внутри раздела. Поменяйте важность, и зал сверху пересчитается. Полоски здесь это доли, не второй подсчёт мандатов.',
+    billsTitle: 'Что этот Кнессет провёл бы',
+    billsLead: 'Законопроект проходит, если за него 61 и больше. Список голосует по своей позиции на близком вопросе: середина воздерживается.',
+    billPass: 'Проходит',
+    billFail: 'Не набирает 61',
+    billYes: 'за',
+    billNo: 'против',
+    billHold: 'воздержались',
+    stripsTitle: 'Где вы по каждому разделу',
+    stripsLead: 'Белый кружок: ваша средняя позиция. Цветные: средние позиции списков. Раскройте раздел, чтобы увидеть каждый вопрос и кто оказался ближе.',
+    byQuestion: (count) => `Вопрос за вопросом (${count})`,
+    closestTag: 'Ближе всего',
+    noOpinion: 'Без мнения',
+    youMark: 'Вы',
+    keysHint: 'Стрелки двигают ползунок, 1–5 ставят деления, Enter дальше, 0 пропуск, Backspace назад.',
     draft: 'Черновик Кнессета по уже данным ответам',
     yourKnesset: 'Ваш 26-й Кнессет',
     fewAnswers: 'Ответов мало, поэтому расклад ближе к ровному дележу, чем к настоящей кампании.',
@@ -533,6 +517,19 @@ export const ui: Record<Locale, Ui> = {
     whereLead: 'Горизонталь: от силы и территории к сделке. Вертикаль: от раввината и власти большинства к суду и светским правилам. Точка «вы» считается по тем же вопросам.',
     copy: 'Скопировать расклад',
     copied: 'Скопировано',
+    saveImage: 'Сохранить картинкой',
+    originalBefore: 'Интерфейс теста сделан по образцу',
+    originalName: 'Duma Simulator',
+    ownCoalition: 'Своя коалиция',
+    ownCoalitionLead: 'Отметьте списки, которые войдут в кабинет. Если двое отказались сидеть вместе, портфели не раздаются.',
+    ownEmpty: 'Пока никого не отметили.',
+    ownSeats: (seats, total) => `${seats} из ${total}`,
+    ownMajority: 'Большинства хватает.',
+    ownShort: (gap) => `До 61 не хватает ${gap}. Это правительство меньшинства.`,
+    ownConst: 'Хватает и на 80: конституционное большинство.',
+    ownVeto: (left, right) => `${left} и ${right} в один кабинет не садятся.`,
+    billSides: 'Кто как голосует',
+    billYou: (side) => side === 'yes' ? 'Вы проголосовали бы за.' : side === 'no' ? 'Вы проголосовали бы против.' : 'Вы скорее воздержались бы.',
     editAnswers: 'Изменить ответы',
     restart: 'Сначала',
     disclaimer: 'Позиции списков - редакционная оценка по публичным заявлениям на осень 2026 года. Кнессет распущен 17 июля 2026 года, голосование назначено на 27 октября. Проект не связан с Центральной избирательной комиссией и не является избирательной агитацией.',
@@ -556,6 +553,7 @@ export const ui: Record<Locale, Ui> = {
       'Seats are allocated by the Bader-Ofer method, which is the D’Hondt method. Each next seat goes to the list with the highest votes / (seats already won + 1).',
       'A government needs 61 votes. Surplus-vote agreements between lists are not included. Refusals to sit together follow the lines of the 2026 campaign: an editorial judgment, not a legal ban.',
       'Your answers do not pick a single party. They build a Knesset as if the country answered the same way. Close lists split the vote. Distant ones fall under the threshold.',
+      'Questions are grouped into sections. A section marked “not important” is skipped. The rest run from less important to more important. After each section the hall shows how many seats are already assigned. The final report covers coalitions, bills, and every answer.',
       'The polling figures on the first screen are a rounded average of published seat forecasts from early October 2026. Ofer Winter’s Am Yisrael is under the threshold in that average.',
     ],
     close: 'Close',
@@ -564,7 +562,7 @@ export const ui: Record<Locale, Ui> = {
     language: 'Language',
     date: '27 October 2026',
     introTitle: 'Build the Knesset with your answers',
-    introLead: 'Eighteen questions on Gaza, the court, drafting Haredim, and who should be prime minister. You get 120 seats, a 3.25% threshold, and a check on whether a cabinet reaches 61.',
+    introLead: (count) => `${count} questions in seven sections: war, territory, the court, religion, money, citizens, and foreign policy. After each section the hall shows how many seats are already assigned. The end is a full report: 120 seats, a 3.25% threshold, and a check on a cabinet of 61.`,
     seatsShort: 'seats',
     thresholdShort: 'threshold',
     majorityShort: 'for a cabinet',
@@ -575,7 +573,7 @@ export const ui: Record<Locale, Ui> = {
     figcaption: "Likud and Yashar have 23 each. Ra'am and the Joint List hold a separate pocket of seats.",
     step: 'Step 1',
     weightsTitle: 'What decides the election for you',
-    weightsLead: 'A theme set to “not important” does not move seats. By default all six weigh the same.',
+    weightsLead: '“Not important” skips the section. The rest run from less important to more important, and the hall updates after each one. By default every theme weighs the same.',
     weights: ['Not important', 'A little', 'Important', 'Decisive'],
     toQuestions: 'To the questions',
     questionOf: (current, total) => `Question ${current} of ${total}`,
@@ -585,7 +583,60 @@ export const ui: Record<Locale, Ui> = {
     choices: ['First', 'Leaning first', 'Middle', 'Leaning second', 'Second'],
     back: 'Back',
     skip: 'Skip',
-    keysHint: 'Keys 1–5, 0 to skip, Backspace to go back.',
+    next: 'Next',
+    sliderUnset: 'Move the slider toward the option closer to you',
+    sliderMid: 'Right in the middle',
+    sliderSlight: (side) => `A little closer to ${side}`,
+    sliderClear: (side) => `Clearly closer to ${side}`,
+    sliderFull: (side) => `Fully for ${side}`,
+    sectionKicker: (current, total) => `Section ${current} of ${total}`,
+    sectionTitle: (name, seats) => `${name} assigns ${seats} ${seats === 1 ? 'seat' : 'seats'}`,
+    seatsAtStake: (seats) => `${seats} ${seats === 1 ? 'seat' : 'seats'} in play`,
+    sectionNext: (name) => `Next: ${name}`,
+    sectionDone: 'Show my Knesset',
+    sectionMajority: (name) => `${name}: an absolute majority`,
+    sectionAhead: (name) => `${name} moves ahead`,
+    sectionKeeps: (name) => `${name} keeps the lead`,
+    sectionTakes: (name) => `${name} takes the lead`,
+    sectionLeft: (seats) => `${seats} seats still ahead`,
+    distributed: (done, total) => `${done} of ${total} assigned`,
+    majorityMark: 'Absolute majority: 61',
+    onTheme: 'From your answers in this section',
+    wikiTitle: 'Election results',
+    wikiLead: 'A card in the style of a Wikipedia infobox. It is easy to save as a screenshot.',
+    wikiElection: 'Knesset election',
+    wikiWhen: '27 October 2026',
+    wikiByAnswers: 'from your answers',
+    wikiHall: (seats) => `All ${seats} seats in the Knesset`,
+    wikiNeed: (seats) => `${seats} seats needed for a majority`,
+    wikiConst: (seats) => `Constitutional majority: ${seats}`,
+    wikiLeader: 'Leader',
+    wikiParty: 'Party',
+    wikiWon: 'Seats won',
+    wikiShare: 'Share of seats',
+    wikiPolls: 'Polls',
+    wikiOthers: 'The rest',
+    wikiSystem: 'System',
+    wikiSystemValue: 'One district, closed lists',
+    wikiBarrier: 'Threshold',
+    wikiCaption: 'Seats at the end of the test',
+    wikiNone: 'No cabinet reaches 61',
+    themeShareTitle: 'Votes by section',
+    themeShareLead: 'Each list’s share inside the section. Change the importance and the hall above is counted again. The bars here are shares, not a second seat count.',
+    billsTitle: 'What this Knesset would pass',
+    billsLead: 'A bill passes at 61 or more. A list votes from its position on the nearest question. The middle abstains.',
+    billPass: 'Passes',
+    billFail: 'Short of 61',
+    billYes: 'for',
+    billNo: 'against',
+    billHold: 'abstained',
+    stripsTitle: 'Where you stand in each section',
+    stripsLead: 'The white dot is your average. The colored dots are the lists. Open a section to see each question and who came closest.',
+    byQuestion: (count) => `Question by question (${count})`,
+    closestTag: 'Closest',
+    noOpinion: 'No opinion',
+    youMark: 'You',
+    keysHint: 'Arrows move the slider, 1–5 snap to the ticks, Enter continues, 0 skips, Backspace goes back.',
     draft: 'A draft Knesset from the answers so far',
     yourKnesset: 'Your 26th Knesset',
     fewAnswers: 'There are few answers, so the result is closer to an even split than to a real campaign.',
@@ -613,6 +664,19 @@ export const ui: Record<Locale, Ui> = {
     whereLead: 'Horizontal: from force and territory toward a deal. Vertical: from the rabbinate and majority rule toward the court and secular rules. The “you” point uses the same questions.',
     copy: 'Copy the result',
     copied: 'Copied',
+    saveImage: 'Save as image',
+    originalBefore: 'The test interface follows',
+    originalName: 'Duma Simulator',
+    ownCoalition: 'Your own coalition',
+    ownCoalitionLead: 'Mark the lists that enter the cabinet. If two of them refuse to sit together, portfolios are not assigned.',
+    ownEmpty: 'No list is marked yet.',
+    ownSeats: (seats, total) => `${seats} of ${total}`,
+    ownMajority: 'There is a majority.',
+    ownShort: (gap) => `${gap} short of 61. This is a minority government.`,
+    ownConst: 'This also reaches 80: a constitutional majority.',
+    ownVeto: (left, right) => `${left} and ${right} will not sit in one cabinet.`,
+    billSides: 'How each list votes',
+    billYou: (side) => side === 'yes' ? 'You would have voted yes.' : side === 'no' ? 'You would have voted no.' : 'You would probably have abstained.',
     editAnswers: 'Edit answers',
     restart: 'Start over',
     disclaimer: 'List positions are an editorial reading of public statements in autumn 2026. The Knesset was dissolved on 17 July 2026, and the vote is set for 27 October. This project is not affiliated with the Central Elections Committee and is not campaign material.',
@@ -636,6 +700,7 @@ export const ui: Record<Locale, Ui> = {
       'המנדטים מתחלקים בשיטת בדר־עופר, שהיא שיטת ד׳ונדט. כל מנדט הבא הולך לרשימה עם המנה הגבוהה ביותר: קולות / (מנדטים שכבר קיבלה + 1).',
       'לממשלה צריך 61 קולות. הסכמי עודפים בין רשימות לא כלולים כאן. סירובים לשבת יחד נקבעו לפי קווי הקמפיין של 2026: זו הערכת מערכת, לא איסור משפטי.',
       'התשובות לא בוחרות מפלגה אחת. הן בונות כנסת כאילו המדינה ענתה אותו דבר. רשימות קרובות מתחלקות בקולות, רחוקות נופלות מתחת לאחוז החסימה.',
+      'השאלות מחולקות למדורים. מדור במשקל «לא חשוב» מדולג. השאר רצים מהפחות חשוב אל החשוב יותר. אחרי כל מדור האולם מראה כמה מנדטים כבר חולקו. בסוף יש דוח: קואליציות, הצעות חוק וכל תשובה.',
       'מספרי הסקרים במסך הראשון הם ממוצע מעוגל של תחזיות מנדטים שפורסמו בתחילת אוקטובר 2026. «עם ישראל» של עופר וינטר נמצא בממוצע הזה מתחת לאחוז החסימה.',
     ],
     close: 'סגירה',
@@ -644,7 +709,7 @@ export const ui: Record<Locale, Ui> = {
     language: 'שפה',
     date: '27 באוקטובר 2026',
     introTitle: 'בנו את הכנסת מהתשובות שלכם',
-    introLead: 'שמונה־עשרה שאלות על עזה, בית המשפט, גיוס חרדים ומי צריך להיות ראש הממשלה. בסוף 120 מנדטים, אחוז חסימה של 3.25%, ובדיקה אם יש ממשלה עם 61.',
+    introLead: (count) => `${count} שאלות בשבעה מדורים: מלחמה, שטח, בית המשפט, דת, כיס, אזרחים ומדיניות חוץ. אחרי כל מדור האולם מראה כמה מנדטים כבר חולקו. בסוף דוח מפורט: 120 מנדטים, אחוז חסימה 3.25%, ובדיקה אם יש ממשלה עם 61.`,
     seatsShort: 'מושבים',
     thresholdShort: 'אחוז חסימה',
     majorityShort: 'לממשלה',
@@ -655,7 +720,7 @@ export const ui: Record<Locale, Ui> = {
     figcaption: 'הליכוד וישר עם 23 כל אחד. לרע״מ ולרשימה המשותפת כיס מנדטים נפרד.',
     step: 'שלב 1',
     weightsTitle: 'מה מכריע לכם את הבחירות',
-    weightsLead: 'נושא במשקל «לא חשוב» לא מזיז מנדטים. כברירת מחדל כל ששת הנושאים שווים.',
+    weightsLead: '«לא חשוב» מדלג על המדור כולו. השאר רצים מהפחות חשוב אל החשוב יותר, והאולם מתעדכן אחרי כל אחד. כברירת מחדל כל הנושאים שווים.',
     weights: ['לא חשוב', 'קצת', 'חשוב', 'מכריע'],
     toQuestions: 'אל השאלות',
     questionOf: (current, total) => `שאלה ${current} מתוך ${total}`,
@@ -665,7 +730,60 @@ export const ui: Record<Locale, Ui> = {
     choices: ['הראשון', 'נוטה לראשון', 'אמצע', 'נוטה לשני', 'השני'],
     back: 'חזרה',
     skip: 'דילוג',
-    keysHint: 'מקשים \u20661–5\u2069, \u20660\u2069 לדילוג, Backspace לחזרה.',
+    next: 'הבא',
+    sliderUnset: 'הזיזו את המחוון לאפשרות הקרובה אליכם',
+    sliderMid: 'בדיוק באמצע',
+    sliderSlight: (side) => `קצת יותר קרוב אל ${side}`,
+    sliderClear: (side) => `ברור יותר קרוב אל ${side}`,
+    sliderFull: (side) => `לגמרי בעד ${side}`,
+    sectionKicker: (current, total) => `מדור ${current} מתוך ${total}`,
+    sectionTitle: (name, seats) => `${name} מחלק ${seats} מנדטים`,
+    seatsAtStake: (seats) => `${seats} מנדטים על הכף`,
+    sectionNext: (name) => `הבא: ${name}`,
+    sectionDone: 'הצגת הכנסת שלי',
+    sectionMajority: (name) => `${name}: רוב מוחלט`,
+    sectionAhead: (name) => `${name} יוצא קדימה`,
+    sectionKeeps: (name) => `${name} שומר על ההובלה`,
+    sectionTakes: (name) => `${name} לוקח את ההובלה`,
+    sectionLeft: (seats) => `עוד ${seats} בהמשך`,
+    distributed: (done, total) => `חולקו ${done} מתוך ${total}`,
+    majorityMark: 'רוב מוחלט: 61',
+    onTheme: 'לפי התשובות במדור הזה',
+    wikiTitle: 'תוצאות הבחירות',
+    wikiLead: 'כרטיס בעיצוב של תיבת מידע בוויקיפדיה. נוח לשמור אותו כצילום מסך.',
+    wikiElection: 'הבחירות לכנסת',
+    wikiWhen: '27 באוקטובר 2026',
+    wikiByAnswers: 'לפי התשובות במבחן',
+    wikiHall: (seats) => `כל ${seats} המנדטים בכנסת`,
+    wikiNeed: (seats) => `לרוב צריך ${seats}`,
+    wikiConst: (seats) => `רוב חוקתי: ${seats}`,
+    wikiLeader: 'מנהיג',
+    wikiParty: 'מפלגה',
+    wikiWon: 'מנדטים שהתקבלו',
+    wikiShare: 'חלק מהמנדטים',
+    wikiPolls: 'סקרים',
+    wikiOthers: 'השאר',
+    wikiSystem: 'שיטה',
+    wikiSystemValue: 'אזור אחד, רשימות סגורות',
+    wikiBarrier: 'אחוז חסימה',
+    wikiCaption: 'חלוקת המנדטים בסוף המבחן',
+    wikiNone: 'אין ממשלה עם 61',
+    themeShareTitle: 'קולות לפי מדור',
+    themeShareLead: 'החלק של כל רשימה בתוך המדור. שנו את החשיבות, והאולם למעלה יחושב מחדש. הפסים כאן הם חלקים, לא ספירת מנדטים שנייה.',
+    billsTitle: 'מה הכנסת הזאת הייתה מעבירה',
+    billsLead: 'הצעת חוק עוברת ב־61 ומעלה. רשימה מצביעה לפי העמדה שלה בשאלה הקרובה. האמצע נמנע.',
+    billPass: 'עובר',
+    billFail: 'אין 61',
+    billYes: 'בעד',
+    billNo: 'נגד',
+    billHold: 'נמנעים',
+    stripsTitle: 'איפה אתם בכל מדור',
+    stripsLead: 'העיגול הלבן הוא הממוצע שלכם. הצבעוניים הם הרשימות. פתחו מדור כדי לראות כל שאלה ומי יצא הכי קרוב.',
+    byQuestion: (count) => `שאלה אחר שאלה (${count})`,
+    closestTag: 'הכי קרוב',
+    noOpinion: 'בלי דעה',
+    youMark: 'אני',
+    keysHint: 'חצים מזיזים את המחוון, \u20661–5\u2069 קופצים לסימונים, Enter ממשיך, \u20660\u2069 מדלג, Backspace חוזר.',
     draft: 'טיוטת כנסת לפי התשובות שכבר ניתנו',
     yourKnesset: 'הכנסת ה־26 שלכם',
     fewAnswers: 'יש מעט תשובות, ולכן החלוקה קרובה יותר לחלוקה שווה מאשר לקמפיין אמיתי.',
@@ -693,6 +811,19 @@ export const ui: Record<Locale, Ui> = {
     whereLead: 'הציר האופקי: מכוח ושטח אל עסקה. הציר האנכי: מהרבנות ושלטון הרוב אל בית המשפט וכללים חילוניים. נקודת «אני» מחושבת מאותן שאלות.',
     copy: 'העתקת התוצאה',
     copied: 'הועתק',
+    saveImage: 'שמירה כתמונה',
+    originalBefore: 'ממשק המבחן בנוי לפי',
+    originalName: 'Duma Simulator',
+    ownCoalition: 'קואליציה משלכם',
+    ownCoalitionLead: 'סמנו את הרשימות שנכנסות לממשלה. אם שתיים מהן מסרבות לשבת יחד, התיקים לא מחולקים.',
+    ownEmpty: 'עדיין לא סומנה רשימה.',
+    ownSeats: (seats, total) => `${seats} מתוך ${total}`,
+    ownMajority: 'יש רוב.',
+    ownShort: (gap) => `חסרים ${gap} ל־61. זו ממשלת מיעוט.`,
+    ownConst: 'יש גם 80: רוב חוקתי.',
+    ownVeto: (left, right) => `${left} ו${right} לא יושבות בממשלה אחת.`,
+    billSides: 'איך כל רשימה מצביעה',
+    billYou: (side) => side === 'yes' ? 'הייתם מצביעים בעד.' : side === 'no' ? 'הייתם מצביעים נגד.' : 'כנראה הייתם נמנעים.',
     editAnswers: 'עריכת תשובות',
     restart: 'מההתחלה',
     disclaimer: 'עמדות הרשימות הן הערכת מערכת לפי הצהרות פומביות בסתיו 2026. הכנסת פוזרה ב־17 ביולי 2026, וההצבעה נקבעה ל־27 באוקטובר. המיזם אינו קשור לוועדת הבחירות המרכזית ואינו תעמולת בחירות.',

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { parties, questions, SEAT_COUNT, THRESHOLD } from './data'
+import { parties, questions, SEAT_COUNT, themes, THRESHOLD } from './data'
 import { questionText, themeText } from './i18n'
-import { buildScenarios, defaultWeights, dhondt, minimalCoalitions, simulate, vetoed } from './model'
+import { buildScenarios, cabinetOf, defaultWeights, dhondt, minimalCoalitions, seatBudget, simulate, userBillLean, vetoClash, vetoed } from './model'
+import { themeOrder } from './quiz'
 
 function fill(value: number) {
   return Object.fromEntries(questions.map((question) => [question.id, value]))
@@ -38,9 +39,10 @@ describe('языки', () => {
         expect(`${copy.title} ${copy.a} ${copy.b}`).not.toMatch(/[А-Яа-яЁё]/)
       }
     }
-    for (const theme of ['security', 'land', 'power', 'faith', 'money', 'citizens']) {
-      expect(themeText('en', theme).name).not.toMatch(/[А-Яа-яЁё]/)
-      expect(themeText('he', theme).name).toMatch(/[\u0590-\u05FF]/)
+    for (const theme of themes) {
+      expect(themeText('en', theme.id).name).not.toMatch(/[А-Яа-яЁё]/)
+      expect(themeText('en', theme.id).lo).not.toMatch(/[А-Яа-яЁё]/)
+      expect(themeText('he', theme.id).name).toMatch(/[\u0590-\u05FF]/)
     }
   })
 })
@@ -69,6 +71,16 @@ describe('knesset 2026', () => {
 
   it('опросные мандаты складываются в 120', () => {
     expect(parties.reduce((sum, party) => sum + party.poll, 0)).toBe(SEAT_COUNT)
+  })
+
+  it('раздаёт места разделами и закрывает зал на 120', () => {
+    const weights = defaultWeights()
+    const order = themeOrder(weights)
+    expect(order).toHaveLength(themes.length)
+    expect(seatBudget(weights, order)).toBe(SEAT_COUNT)
+    expect(seatBudget(weights, [order[0]])).toBeGreaterThan(0)
+    expect(seatBudget(weights, [order[0]])).toBeLessThan(SEAT_COUNT)
+    expect(seatBudget(weights, [])).toBe(0)
   })
 
   it('всегда раздаёт 120 мандатов', () => {
@@ -128,5 +140,20 @@ describe('coalitions', () => {
     const coalitions = minimalCoalitions(seats)
     expect(coalitions.every((item) => item.seats >= 61)).toBe(true)
     expect(coalitions.some((item) => item.ids.includes('likud') && item.ids.includes('yashar'))).toBe(false)
+  })
+
+  it('своя коалиция называет пару отказа и раздаёт портфели допустимому составу', () => {
+    expect(vetoClash(['likud', 'yashar'])).toEqual(['likud', 'yashar'])
+    expect(cabinetOf(['likud', 'yashar'], { likud: 40, yashar: 30 })).toBeNull()
+    const cabinet = cabinetOf(['yashar', 'byachad'], { yashar: 40, byachad: 25 })
+    expect(cabinet?.[0]).toEqual({ post: 'pm', partyId: 'yashar' })
+    expect(cabinet?.length).toBeGreaterThan(1)
+  })
+
+  it('голос пользователя по законопроекту смотрит на знак ответа', () => {
+    expect(userBillLean('court', -1, { court: -1 })).toBe('yes')
+    expect(userBillLean('court', -1, { court: 1 })).toBe('no')
+    expect(userBillLean('court', -1, { court: 0 })).toBe('hold')
+    expect(userBillLean('court', -1, {})).toBeNull()
   })
 })
