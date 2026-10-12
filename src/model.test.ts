@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parties, questions, SEAT_COUNT, themes, THRESHOLD } from './data'
 import { questionText, themeText } from './i18n'
-import { buildScenarios, defaultWeights, dhondt, minimalCoalitions, seatBudget, simulate, vetoed } from './model'
+import { buildScenarios, cabinetOf, defaultWeights, dhondt, minimalCoalitions, seatBudget, simulate, userBillLean, vetoClash, vetoed } from './model'
 import { themeOrder } from './quiz'
 
 function fill(value: number) {
@@ -140,5 +140,20 @@ describe('coalitions', () => {
     const coalitions = minimalCoalitions(seats)
     expect(coalitions.every((item) => item.seats >= 61)).toBe(true)
     expect(coalitions.some((item) => item.ids.includes('likud') && item.ids.includes('yashar'))).toBe(false)
+  })
+
+  it('своя коалиция называет пару отказа и раздаёт портфели допустимому составу', () => {
+    expect(vetoClash(['likud', 'yashar'])).toEqual(['likud', 'yashar'])
+    expect(cabinetOf(['likud', 'yashar'], { likud: 40, yashar: 30 })).toBeNull()
+    const cabinet = cabinetOf(['yashar', 'byachad'], { yashar: 40, byachad: 25 })
+    expect(cabinet?.[0]).toEqual({ post: 'pm', partyId: 'yashar' })
+    expect(cabinet?.length).toBeGreaterThan(1)
+  })
+
+  it('голос пользователя по законопроекту смотрит на знак ответа', () => {
+    expect(userBillLean('court', -1, { court: -1 })).toBe('yes')
+    expect(userBillLean('court', -1, { court: 1 })).toBe('no')
+    expect(userBillLean('court', -1, { court: 0 })).toBe('hold')
+    expect(userBillLean('court', -1, {})).toBeNull()
   })
 })

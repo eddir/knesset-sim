@@ -103,16 +103,20 @@ function shares(question: Question, value: number) {
   return raw.map((item) => (sum ? item / sum : 0))
 }
 
-export function vetoed(ids: string[]) {
+export function vetoClash(ids: string[]): [string, string] | null {
   for (let i = 0; i < ids.length; i += 1) {
     for (let j = i + 1; j < ids.length; j += 1) {
-      const pair = vetoPairs.some(
+      const hit = vetoPairs.some(
         ([a, b]) => (a === ids[i] && b === ids[j]) || (b === ids[i] && a === ids[j]),
       )
-      if (pair) return true
+      if (hit) return [ids[i], ids[j]]
     }
   }
-  return false
+  return null
+}
+
+export function vetoed(ids: string[]) {
+  return vetoClash(ids) !== null
 }
 
 export function primeMinister(ids: string[], seats: Record<string, number>) {
@@ -379,9 +383,9 @@ function compassOf(weights: Weights, pick: (question: Question) => number | null
   }
 }
 
-function buildCabinet(ids: string[], seats: Record<string, number>, pm: string | null) {
+function buildCabinet(ids: string[], seats: Record<string, number>, pm: string | null, allowAll = false) {
   if (!pm) return null
-  const members = ids.filter((id) => partyById(id).cabinet && (seats[id] ?? 0) > 0)
+  const members = ids.filter((id) => (allowAll || partyById(id).cabinet) && (seats[id] ?? 0) > 0)
   if (!members.length) return null
   const load = new Map<string, number>()
   const assigned: { post: string; partyId: string }[] = [{ post: 'pm', partyId: pm }]
@@ -396,6 +400,13 @@ function buildCabinet(ids: string[], seats: Record<string, number>, pm: string |
     load.set(pick, (load.get(pick) ?? 0) + 1)
   }
   return assigned
+}
+
+/** Кабинет для коалиции, которую собрал сам отвечающий. Списки вне обычных сценариев тоже получают портфели. */
+export function cabinetOf(ids: string[], seats: Record<string, number>) {
+  const present = ids.filter((id) => (seats[id] ?? 0) > 0)
+  if (!present.length || vetoed(present)) return null
+  return buildCabinet(present, seats, primeMinister(present, seats), true)
 }
 
 function themeMass(themeId: string, weights: Weights) {
@@ -547,6 +558,18 @@ export type BillTally = {
   no: number
   abstain: number
   passed: boolean
+  yesIds: string[]
+  noIds: string[]
+  holdIds: string[]
+}
+
+export function userBillLean(questionId: string, side: -1 | 1, answers: Answers): 'yes' | 'no' | 'hold' | null {
+  const value = answers[questionId]
+  if (typeof value !== 'number') return null
+  const lean = value * side
+  if (lean > 0.15) return 'yes'
+  if (lean < -0.15) return 'no'
+  return 'hold'
 }
 
 export function billTallies(seats: Record<string, number>): BillTally[] {
@@ -555,14 +578,24 @@ export function billTallies(seats: Record<string, number>): BillTally[] {
     let yes = 0
     let no = 0
     let abstain = 0
+    const yesIds: string[] = []
+    const noIds: string[] = []
+    const holdIds: string[] = []
     for (const party of parties) {
       const count = seats[party.id] ?? 0
       if (!count || !question) continue
       const lean = (question.stance[party.id] ?? 0) * bill.side
-      if (lean > 0.15) yes += count
-      else if (lean < -0.15) no += count
-      else abstain += count
+      if (lean > 0.15) {
+        yes += count
+        yesIds.push(party.id)
+      } else if (lean < -0.15) {
+        no += count
+        noIds.push(party.id)
+      } else {
+        abstain += count
+        holdIds.push(party.id)
+      }
     }
-    return { id: bill.id, yes, no, abstain, passed: yes >= MAJORITY }
+    return { id: bill.id, yes, no, abstain, passed: yes >= MAJORITY, yesIds, noIds, holdIds }
   })
 }

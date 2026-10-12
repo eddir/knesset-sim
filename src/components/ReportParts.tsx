@@ -1,9 +1,10 @@
 import { Fragment, useState, type ReactNode } from 'react'
-import { MAJORITY, SEAT_COUNT, parties, questions, themes } from '@/data'
+import { MAJORITY, SEAT_COUNT, parties, questions, themes, weightLevels } from '@/data'
 import { Hemicycle } from '@/components/Hemicycle'
 import { groupsFrom } from '@/hemicycle'
-import { billText, partyLeader, partyName, themeText, useI18n, questionText } from '@/i18n'
-import { billTallies, formatPct, nearestParty, themeAxis, themeShares, type Answers, type SeatResult, type Weights } from '@/model'
+import { bills } from '@/bills'
+import { billText, partyLeader, partyName, postName, themeText, useI18n, questionText } from '@/i18n'
+import { billTallies, cabinetOf, formatPct, nearestParty, themeAxis, themeShares, userBillLean, vetoClash, type Answers, type SeatResult, type Weights } from '@/model'
 
 function initials(name: string) {
   const words = name.split(/\s+/).filter(Boolean)
@@ -94,7 +95,23 @@ export function WikiCard({ result }: { result: SeatResult }) {
   )
 }
 
-export function BillList({ seats }: { seats: Record<string, number> }) {
+function SideLine({ label, ids }: { label: string; ids: string[] }) {
+  const { locale } = useI18n()
+  if (!ids.length) return null
+  return (
+    <p className="text-xs leading-relaxed text-muted-foreground">
+      <b className="text-foreground capitalize">{label}: </b>
+      {ids.map((id) => (
+        <span key={id} className="me-2 inline-flex items-center">
+          <i className="me-1 inline-block size-2 rounded-full" style={{ background: parties.find((party) => party.id === id)?.color }} />
+          {partyName(locale, id)}
+        </span>
+      ))}
+    </p>
+  )
+}
+
+export function BillList({ seats, answers }: { seats: Record<string, number>; answers: Answers }) {
   const { t, locale } = useI18n()
   const rows = billTallies(seats)
   return (
@@ -105,6 +122,8 @@ export function BillList({ seats }: { seats: Record<string, number> }) {
         {rows.map((row) => {
           const copy = billText(locale, row.id)
           const total = Math.max(1, row.yes + row.no + row.abstain)
+          const bill = bills.find((item) => item.id === row.id)
+          const lean = bill ? userBillLean(bill.questionId, bill.side, answers) : null
           return (
             <article key={row.id} className="rounded-xl border bg-card p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -121,6 +140,13 @@ export function BillList({ seats }: { seats: Record<string, number> }) {
               <p className="mt-1 text-xs text-muted-foreground tabular-nums">
                 {row.yes} {t.billYes} · {row.no} {t.billNo} · {row.abstain} {t.billHold}
               </p>
+              <div className="mt-2 space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground">{t.billSides}</p>
+                <SideLine label={t.billYes} ids={row.yesIds} />
+                <SideLine label={t.billHold} ids={row.holdIds} />
+                <SideLine label={t.billNo} ids={row.noIds} />
+              </div>
+              {lean && <p className="mt-2 text-sm">{t.billYou(lean)}</p>}
             </article>
           )
         })}
@@ -129,7 +155,15 @@ export function BillList({ seats }: { seats: Record<string, number> }) {
   )
 }
 
-export function ThemeShareList({ answers, weights }: { answers: Answers; weights: Weights }) {
+export function ThemeShareList({
+  answers,
+  weights,
+  onWeight,
+}: {
+  answers: Answers
+  weights: Weights
+  onWeight: (themeId: string, level: number) => void
+}) {
   const { t, locale } = useI18n()
   const rows = themeShares(answers, weights).filter((row) => row.answered > 0)
   return (
@@ -150,6 +184,13 @@ export function ThemeShareList({ answers, weights }: { answers: Answers; weights
               <div className="vbar mt-3">
                 {parts.map((party) => (
                   <i key={party.id} title={`${partyName(locale, party.id)} ${formatPct(row.shares[party.id], locale)}%`} style={{ width: `${row.shares[party.id] * 100}%`, background: party.color }} />
+                ))}
+              </div>
+              <div className="seg mt-3" role="radiogroup" aria-label={theme.name}>
+                {weightLevels.map((level) => (
+                  <button key={level.id} type="button" role="radio" aria-checked={weights[row.themeId] === level.id} onClick={() => onWeight(row.themeId, level.id)}>
+                    {t.weights[level.id]}
+                  </button>
                 ))}
               </div>
             </article>
@@ -234,6 +275,57 @@ export function ThemeStrips({ answers }: { answers: Answers }) {
           )
         })}
       </div>
+    </section>
+  )
+}
+
+export function OwnCoalition({ seats }: { seats: Record<string, number> }) {
+  const { t, locale } = useI18n()
+  const [picked, setPicked] = useState<string[]>([])
+  const present = parties.filter((party) => (seats[party.id] ?? 0) > 0)
+  const total = picked.reduce((sum, id) => sum + (seats[id] ?? 0), 0)
+  const clash = vetoClash(picked)
+  const cabinet = cabinetOf(picked, seats)
+  const constitutional = Math.ceil(SEAT_COUNT * 2 / 3)
+  return (
+    <section>
+      <h2 className="font-heading text-2xl font-semibold">{t.ownCoalition}</h2>
+      <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{t.ownCoalitionLead}</p>
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        {present.map((party) => {
+          const on = picked.includes(party.id)
+          return (
+            <button
+              key={party.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => setPicked((current) => on ? current.filter((id) => id !== party.id) : [...current, party.id])}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${on ? 'border-primary bg-primary text-primary-foreground' : 'bg-card text-muted-foreground'}`}
+            >
+              <i className="size-2 rounded-full" style={{ background: on ? 'currentColor' : party.color }} />
+              {partyName(locale, party.id)} {seats[party.id]}
+            </button>
+          )
+        })}
+      </div>
+      <p className="mt-3 text-sm" aria-live="polite">
+        {picked.length === 0 && t.ownEmpty}
+        {picked.length > 0 && <b className="tabular-nums">{t.ownSeats(total, SEAT_COUNT)}. </b>}
+        {picked.length > 0 && clash && t.ownVeto(partyName(locale, clash[0]), partyName(locale, clash[1]))}
+        {picked.length > 0 && !clash && total >= constitutional && t.ownConst}
+        {picked.length > 0 && !clash && total >= MAJORITY && total < constitutional && t.ownMajority}
+        {picked.length > 0 && !clash && total < MAJORITY && t.ownShort(MAJORITY - total)}
+      </p>
+      {cabinet && (
+        <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+          {cabinet.map((seat) => (
+            <li key={seat.post} className="flex items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3">
+              <span>{postName(locale, seat.post)}</span>
+              <span className="text-end font-medium">{partyName(locale, seat.partyId)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   )
 }

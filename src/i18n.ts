@@ -178,6 +178,42 @@ export function partyLeader(locale: Locale, id: string) {
   return partyById(id).leader
 }
 
+const enAbout: Record<string, string> = {
+  joint: 'Hadash, Ta\'al and Balad. In the autumn 2026 polls the list is led by Yousef Jabareen. It usually stays out of the cabinet.',
+  democrats: 'The heirs of Labor and Meretz. The left flank of the Zionist opposition, led by Yair Golan.',
+  raam: 'Mansour Abbas\'s Islamist list. In 2021 it joined the Bennett-Lapid coalition.',
+  yashar: 'A centrist list led by former chief of staff Gadi Eisenkot. In the autumn 2026 polls it runs level with Likud.',
+  byachad: 'Together, Naftali Bennett\'s party. To the right of Yashar, and against Netanyahu\'s return in this cycle.',
+  yb: 'Avigdor Lieberman\'s party: hard security, and an equally hard refusal to keep Haredim out of the army.',
+  likud: 'The governing party. The list is led by Benjamin Netanyahu, prime minister of the dissolved 25th Knesset.',
+  amcha: 'A right-wing list led by reserve general Ofer Winter. Some reports call it Am Yisrael. In the early-October polling average it is below the threshold.',
+  shas: 'Aryeh Deri\'s Sephardi Haredi party: benefits for its voters and an alliance with Netanyahu.',
+  utj: 'The Ashkenazi Haredi list. It has no prime-ministerial candidate. Autumn 2026 polls tie it to Yaakov Asher.',
+  rz: 'Bezalel Smotrich\'s list with Zehut: settlements, sovereignty in Judea and Samaria, religious Zionism.',
+  otzma: 'Itamar Ben-Gvir\'s party. The far right: settlements, the police, and the war until Hamas is dismantled.',
+}
+
+const heAbout: Record<string, string> = {
+  joint: 'חד״ש, תע״ל ובל״ד. בסקרים של סתיו 2026 בראש הרשימה יוסף ג׳בארין. בדרך כלל לא נכנסת לממשלה.',
+  democrats: 'יורשות העבודה ומרצ. האגף השמאלי של האופוזיציה הציונית, בראשות יאיר גולן.',
+  raam: 'הרשימה האסלאמית של מנסור עבאס. ב־2021 כבר נכנסה לקואליציה של בנט ולפיד.',
+  yashar: 'רשימת מרכז של הרמטכ״ל לשעבר גדי איזנקוט. בסתיו 2026 היא הולכת ראש בראש עם הליכוד.',
+  byachad: '«ביחד», מפלגתו של נפתלי בנט. ימינה מישר, ובמחזור הזה נגד חזרת נתניהו.',
+  yb: 'מפלגתו של אביגדור ליברמן: ביטחון קשוח וסירוב קשוח באותה מידה לשמור על פטור לחרדים.',
+  likud: 'מפלגת השלטון. בראש הרשימה בנימין נתניהו, ראש ממשלת הכנסת ה־25 שפוזרה.',
+  amcha: 'רשימת ימין של האלוף במילואים עופר וינטר. בחלק מהדיווחים קוראים לה «עמך ישראל». בממוצע הסקרים מתחילת אוקטובר היא מתחת לאחוז החסימה.',
+  shas: 'מפלגת החרדים הספרדית של אריה דרעי: קצבאות לבוחריה וברית עם נתניהו.',
+  utj: 'הרשימה החרדית האשכנזית. אין לה מועמד לראשות הממשלה. בסתיו 2026 קושרים אותה ליעקב אשר.',
+  rz: 'רשימתו של בצלאל סמוטריץ׳ עם זהות: התנחלויות, ריבונות ביהודה ושומרון, ציונות דתית.',
+  otzma: 'מפלגתו של איתמר בן־גביר. ימין קיצוני: התנחלויות, משטרה והמשך המלחמה עד פירוק חמאס.',
+}
+
+export function partyAbout(locale: Locale, id: string) {
+  if (locale === 'en') return enAbout[id] ?? partyById(id).about
+  if (locale === 'he') return heAbout[id] ?? partyById(id).about
+  return partyById(id).about
+}
+
 export function leaderOf(locale: Locale, id: string | null) {
   if (!id) return locale === 'he' ? 'אין מועמד' : locale === 'en' ? 'no one' : 'некому'
   return partyLeader(locale, id)
@@ -332,8 +368,21 @@ type Ui = {
   whereLead: string
   copy: string
   copied: string
+  saveImage: string
   editAnswers: string
   restart: string
+  originalBefore: string
+  originalName: string
+  ownCoalition: string
+  ownCoalitionLead: string
+  ownEmpty: string
+  ownSeats: (seats: number, total: number) => string
+  ownMajority: string
+  ownShort: (gap: number) => string
+  ownConst: string
+  ownVeto: (left: string, right: string) => string
+  billSides: string
+  billYou: (side: 'yes' | 'no' | 'hold') => string
   disclaimer: string
   shareText: (lines: string, verdict: string) => string
   compassAria: string
@@ -426,7 +475,7 @@ export const ui: Record<Locale, Ui> = {
     wikiCaption: 'Распределение мест по итогам теста',
     wikiNone: 'Кабинет на 61 не собран',
     themeShareTitle: 'Голоса по разделам',
-    themeShareLead: 'Доля каждого списка внутри раздела. Это не второй подсчёт мандатов: мандаты в зале посчитаны по всем ответам сразу.',
+    themeShareLead: 'Доля каждого списка внутри раздела. Поменяйте важность, и зал сверху пересчитается. Полоски здесь это доли, не второй подсчёт мандатов.',
     billsTitle: 'Что этот Кнессет провёл бы',
     billsLead: 'Законопроект проходит, если за него 61 и больше. Список голосует по своей позиции на близком вопросе: середина воздерживается.',
     billPass: 'Проходит',
@@ -468,6 +517,19 @@ export const ui: Record<Locale, Ui> = {
     whereLead: 'Горизонталь: от силы и территории к сделке. Вертикаль: от раввината и власти большинства к суду и светским правилам. Точка «вы» считается по тем же вопросам.',
     copy: 'Скопировать расклад',
     copied: 'Скопировано',
+    saveImage: 'Сохранить картинкой',
+    originalBefore: 'Интерфейс теста сделан по образцу',
+    originalName: 'Duma Simulator',
+    ownCoalition: 'Своя коалиция',
+    ownCoalitionLead: 'Отметьте списки, которые войдут в кабинет. Если двое отказались сидеть вместе, портфели не раздаются.',
+    ownEmpty: 'Пока никого не отметили.',
+    ownSeats: (seats, total) => `${seats} из ${total}`,
+    ownMajority: 'Большинства хватает.',
+    ownShort: (gap) => `До 61 не хватает ${gap}. Это правительство меньшинства.`,
+    ownConst: 'Хватает и на 80: конституционное большинство.',
+    ownVeto: (left, right) => `${left} и ${right} в один кабинет не садятся.`,
+    billSides: 'Кто как голосует',
+    billYou: (side) => side === 'yes' ? 'Вы проголосовали бы за.' : side === 'no' ? 'Вы проголосовали бы против.' : 'Вы скорее воздержались бы.',
     editAnswers: 'Изменить ответы',
     restart: 'Сначала',
     disclaimer: 'Позиции списков - редакционная оценка по публичным заявлениям на осень 2026 года. Кнессет распущен 17 июля 2026 года, голосование назначено на 27 октября. Проект не связан с Центральной избирательной комиссией и не является избирательной агитацией.',
@@ -560,7 +622,7 @@ export const ui: Record<Locale, Ui> = {
     wikiCaption: 'Seats at the end of the test',
     wikiNone: 'No cabinet reaches 61',
     themeShareTitle: 'Votes by section',
-    themeShareLead: 'Each list’s share inside the section. This is not a second seat count: the seats in the hall are counted from every answer together.',
+    themeShareLead: 'Each list’s share inside the section. Change the importance and the hall above is counted again. The bars here are shares, not a second seat count.',
     billsTitle: 'What this Knesset would pass',
     billsLead: 'A bill passes at 61 or more. A list votes from its position on the nearest question. The middle abstains.',
     billPass: 'Passes',
@@ -602,6 +664,19 @@ export const ui: Record<Locale, Ui> = {
     whereLead: 'Horizontal: from force and territory toward a deal. Vertical: from the rabbinate and majority rule toward the court and secular rules. The “you” point uses the same questions.',
     copy: 'Copy the result',
     copied: 'Copied',
+    saveImage: 'Save as image',
+    originalBefore: 'The test interface follows',
+    originalName: 'Duma Simulator',
+    ownCoalition: 'Your own coalition',
+    ownCoalitionLead: 'Mark the lists that enter the cabinet. If two of them refuse to sit together, portfolios are not assigned.',
+    ownEmpty: 'No list is marked yet.',
+    ownSeats: (seats, total) => `${seats} of ${total}`,
+    ownMajority: 'There is a majority.',
+    ownShort: (gap) => `${gap} short of 61. This is a minority government.`,
+    ownConst: 'This also reaches 80: a constitutional majority.',
+    ownVeto: (left, right) => `${left} and ${right} will not sit in one cabinet.`,
+    billSides: 'How each list votes',
+    billYou: (side) => side === 'yes' ? 'You would have voted yes.' : side === 'no' ? 'You would have voted no.' : 'You would probably have abstained.',
     editAnswers: 'Edit answers',
     restart: 'Start over',
     disclaimer: 'List positions are an editorial reading of public statements in autumn 2026. The Knesset was dissolved on 17 July 2026, and the vote is set for 27 October. This project is not affiliated with the Central Elections Committee and is not campaign material.',
@@ -694,7 +769,7 @@ export const ui: Record<Locale, Ui> = {
     wikiCaption: 'חלוקת המנדטים בסוף המבחן',
     wikiNone: 'אין ממשלה עם 61',
     themeShareTitle: 'קולות לפי מדור',
-    themeShareLead: 'החלק של כל רשימה בתוך המדור. זה לא ספירת מנדטים שנייה: המנדטים באולם נספרים מכל התשובות יחד.',
+    themeShareLead: 'החלק של כל רשימה בתוך המדור. שנו את החשיבות, והאולם למעלה יחושב מחדש. הפסים כאן הם חלקים, לא ספירת מנדטים שנייה.',
     billsTitle: 'מה הכנסת הזאת הייתה מעבירה',
     billsLead: 'הצעת חוק עוברת ב־61 ומעלה. רשימה מצביעה לפי העמדה שלה בשאלה הקרובה. האמצע נמנע.',
     billPass: 'עובר',
@@ -736,6 +811,19 @@ export const ui: Record<Locale, Ui> = {
     whereLead: 'הציר האופקי: מכוח ושטח אל עסקה. הציר האנכי: מהרבנות ושלטון הרוב אל בית המשפט וכללים חילוניים. נקודת «אני» מחושבת מאותן שאלות.',
     copy: 'העתקת התוצאה',
     copied: 'הועתק',
+    saveImage: 'שמירה כתמונה',
+    originalBefore: 'ממשק המבחן בנוי לפי',
+    originalName: 'Duma Simulator',
+    ownCoalition: 'קואליציה משלכם',
+    ownCoalitionLead: 'סמנו את הרשימות שנכנסות לממשלה. אם שתיים מהן מסרבות לשבת יחד, התיקים לא מחולקים.',
+    ownEmpty: 'עדיין לא סומנה רשימה.',
+    ownSeats: (seats, total) => `${seats} מתוך ${total}`,
+    ownMajority: 'יש רוב.',
+    ownShort: (gap) => `חסרים ${gap} ל־61. זו ממשלת מיעוט.`,
+    ownConst: 'יש גם 80: רוב חוקתי.',
+    ownVeto: (left, right) => `${left} ו${right} לא יושבות בממשלה אחת.`,
+    billSides: 'איך כל רשימה מצביעה',
+    billYou: (side) => side === 'yes' ? 'הייתם מצביעים בעד.' : side === 'no' ? 'הייתם מצביעים נגד.' : 'כנראה הייתם נמנעים.',
     editAnswers: 'עריכת תשובות',
     restart: 'מההתחלה',
     disclaimer: 'עמדות הרשימות הן הערכת מערכת לפי הצהרות פומביות בסתיו 2026. הכנסת פוזרה ב־17 ביולי 2026, וההצבעה נקבעה ל־27 באוקטובר. המיזם אינו קשור לוועדת הבחירות המרכזית ואינו תעמולת בחירות.',

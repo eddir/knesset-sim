@@ -59,6 +59,7 @@ describe('симулятор', () => {
   it('проходит путь от опроса до Кнессета', async () => {
     render(<App />)
     expect(screen.getByRole('heading', { name: 'Соберите Кнессет своими ответами' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Duma Simulator' }).getAttribute('href')).toBe('https://bolshoiprikol2.github.io/Duma-Simulator/ru/')
     fireEvent.click(screen.getByRole('button', { name: 'Сразу к вопросам' }))
     finishQuiz()
     expect(screen.getByText('Ваш 26-й Кнессет')).toBeTruthy()
@@ -68,6 +69,8 @@ describe('симулятор', () => {
     expect(screen.getAllByText('Мест получено').length).toBeGreaterThan(0)
     expect(screen.getByText('Конституционное большинство: 80')).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Что этот Кнессет провёл бы' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Своя коалиция' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Сохранить картинкой' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Где вы по каждому разделу' })).toBeTruthy()
     expect(screen.getByText(/Совпадение \d/)).toBeTruthy()
     expect(screen.queryByText(/% \./)).toBeNull()

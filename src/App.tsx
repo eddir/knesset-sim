@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Compass } from '@/components/Compass'
 import { Hemicycle } from '@/components/Hemicycle'
-import { BillList, ThemeShareList, ThemeStrips, WikiCard } from '@/components/ReportParts'
+import { BillList, OwnCoalition, ThemeShareList, ThemeStrips, WikiCard } from '@/components/ReportParts'
 import { QuizScreen } from '@/components/QuizScreen'
 import { SectionBoard } from '@/components/SectionBoard'
 import { groupsFrom } from '@/hemicycle'
@@ -25,7 +25,8 @@ import {
 } from '@/data'
 import { defaultWeights, formatPct, seatBudget, simulate, type Answers, type SeatResult, type Weights } from '@/model'
 import { questionsInOrder, sectionSpan, themeOrder } from '@/quiz'
-import { I18nContext, loadLocale, partyLeader, partyName, saveLocale, themeText, ui, postName, useI18n, type Locale } from '@/i18n'
+import { I18nContext, loadLocale, partyAbout, partyLeader, partyName, saveLocale, themeText, ui, postName, useI18n, type Locale } from '@/i18n'
+import { downloadResultCard } from '@/resultCard'
 
 type Phase = 'intro' | 'weights' | 'questions' | 'section' | 'results'
 
@@ -283,9 +284,18 @@ export default function App() {
             }}
             onEdit={() => { setIndex(Math.max(0, list.length - 1)); go('questions') }}
             onReset={reset}
+            onWeight={(themeId, level) => setWeights((current) => {
+              const next = { ...current, [themeId]: level }
+              if (!themes.some((theme) => next[theme.id] > 0)) return current
+              return next
+            })}
           />
         )}
       </main>
+      <footer className="mx-auto w-full max-w-5xl px-4 pb-10 text-sm text-muted-foreground sm:px-6">
+        {t.originalBefore}{' '}
+        <a className="font-medium text-primary underline" href="https://bolshoiprikol2.github.io/Duma-Simulator/ru/" target="_blank" rel="noreferrer">{t.originalName}</a>
+      </footer>
     </div>
     </I18nContext.Provider>
   )
@@ -448,6 +458,7 @@ function Results({
   onCopy,
   onEdit,
   onReset,
+  onWeight,
 }: {
   result: SeatResult
   answers: Answers
@@ -459,6 +470,7 @@ function Results({
   onCopy: () => void
   onEdit: () => void
   onReset: () => void
+  onWeight: (themeId: string, level: number) => void
 }) {
   const { t, locale } = useI18n()
   const closestId = result.closestId
@@ -486,6 +498,8 @@ function Results({
             sub={t.hemicycleSub}
           />
         </div>
+        <div>
+        {activeId && <p className="mb-3 rounded-xl border bg-card px-4 py-3 text-sm leading-relaxed">{partyAbout(locale, activeId)}</p>}
         <ul className="space-y-1.5">
           {parties
             .filter((party) => result.seats[party.id] > 0)
@@ -515,6 +529,7 @@ function Results({
             </li>
           )}
         </ul>
+        </div>
       </div>
 
       <div className="mt-10"><WikiCard result={result} /></div>
@@ -547,6 +562,8 @@ function Results({
           })}
         </div>
       </section>
+
+      <div className="mt-10"><OwnCoalition seats={result.seats} /></div>
 
       {result.coalitions.length > 0 && (
         <section className="mt-10">
@@ -583,8 +600,14 @@ function Results({
         </section>
       )}
 
-      <div className="mt-10"><BillList seats={result.seats} /></div>
-      <div className="mt-10"><ThemeShareList answers={answers} weights={weights} /></div>
+      <div className="mt-10"><BillList seats={result.seats} answers={answers} /></div>
+      <div className="mt-10">
+        <ThemeShareList
+          answers={answers}
+          weights={weights}
+          onWeight={onWeight}
+        />
+      </div>
 
       <section className="mt-10 rounded-2xl border bg-card p-5">
         <h2 className="font-heading text-2xl font-semibold">{result.outlookTitle}</h2>
@@ -632,6 +655,22 @@ function Results({
 
       <div className="mt-10 flex flex-wrap gap-3">
         <Button type="button" className="h-11 px-5" onClick={onCopy}>{copied ? t.copied : t.copy}</Button>
+        <Button type="button" variant="outline" className="h-11" onClick={() => {
+          const names = Object.fromEntries(parties.map((party) => [party.id, partyName(locale, party.id)]))
+          void downloadResultCard({
+            brand: `${t.brandKicker} · ${t.brand}`,
+            title: result.verdictTitle,
+            subtitle: t.yourKnesset,
+            seats: result.seats,
+            names,
+            label: '120',
+            sub: t.hemicycleSub,
+            lines: [
+              `${t.closestBefore} ${partyName(locale, closestId)}, ${formatPct(result.closeness[closestId], locale)}%`,
+              t.majorityMark,
+            ],
+          })
+        }}>{t.saveImage}</Button>
         <Button type="button" variant="outline" className="h-11" onClick={onEdit}>{t.editAnswers}</Button>
         <Button type="button" variant="ghost" className="h-11" onClick={onReset}>{t.restart}</Button>
       </div>
