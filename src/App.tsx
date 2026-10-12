@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -10,7 +10,10 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Compass } from '@/components/Compass'
-import { Hemicycle, StackedBar } from '@/components/Hemicycle'
+import { Hemicycle } from '@/components/Hemicycle'
+import { BillList, ThemeShareList, ThemeStrips, WikiCard } from '@/components/ReportParts'
+import { QuizScreen } from '@/components/QuizScreen'
+import { SectionBoard } from '@/components/SectionBoard'
 import { groupsFrom } from '@/hemicycle'
 import {
   blocs,
@@ -20,36 +23,32 @@ import {
   themes,
   weightLevels,
 } from '@/data'
-import { defaultWeights, formatPct, simulate, type Answers, type SeatResult, type Weights } from '@/model'
-import { I18nContext, loadLocale, partyLeader, partyName, questionText, saveLocale, themeText, ui, postName, useI18n, type Locale } from '@/i18n'
+import { defaultWeights, formatPct, seatBudget, simulate, type Answers, type SeatResult, type Weights } from '@/model'
+import { questionsInOrder, sectionSpan, themeOrder } from '@/quiz'
+import { I18nContext, loadLocale, partyLeader, partyName, saveLocale, themeText, ui, postName, useI18n, type Locale } from '@/i18n'
 
-type Phase = 'intro' | 'weights' | 'questions' | 'results'
+type Phase = 'intro' | 'weights' | 'questions' | 'section' | 'results'
 
 type Save = {
   phase: Phase
   weights: Weights
   answers: Answers
   index: number
+  order: string[]
+  section: string | null
 }
 
 const STORAGE = 'knesset-2026-v1'
-const choices = [
-  { value: -1, key: '1' },
-  { value: -0.5, key: '2' },
-  { value: 0, key: '3' },
-  { value: 0.5, key: '4' },
-  { value: 1, key: '5' },
-]
-const choiceValues = new Set(choices.map((choice) => choice.value))
 const weightValues = new Set<number>(weightLevels.map((level) => level.id))
+const themeIds = new Set(themes.map((theme) => theme.id))
 
 function loadSave(): Save {
-  const empty: Save = { phase: 'intro', weights: defaultWeights(), answers: {}, index: 0 }
+  const empty: Save = { phase: 'intro', weights: defaultWeights(), answers: {}, index: 0, order: themeOrder(defaultWeights()), section: null }
   try {
     const raw = localStorage.getItem(STORAGE)
     if (!raw) return empty
     const data = JSON.parse(raw) as Partial<Save>
-    const phase: Phase = data.phase === 'weights' || data.phase === 'questions' || data.phase === 'results' ? data.phase : 'intro'
+    const phase: Phase = data.phase === 'weights' || data.phase === 'questions' || data.phase === 'section' || data.phase === 'results' ? data.phase : 'intro'
     const weights = defaultWeights()
     if (data.weights && typeof data.weights === 'object') {
       for (const theme of themes) {
@@ -62,15 +61,21 @@ function loadSave(): Save {
       for (const question of questions) {
         const value = (data.answers as Record<string, unknown>)[question.id]
         if (value === null) answers[question.id] = null
-        else if (typeof value === 'number' && choiceValues.has(value)) answers[question.id] = value
+        else if (typeof value === 'number' && Number.isFinite(value) && value >= -1 && value <= 1) answers[question.id] = Math.round(value * 100) / 100
       }
     }
+    const storedOrder = Array.isArray(data.order) ? data.order.filter((id): id is string => typeof id === 'string' && themeIds.has(id)) : []
+    const order = storedOrder.length ? storedOrder : themeOrder(weights)
+    const list = questionsInOrder(order)
     const index = Number.isFinite(data.index) ? Math.round(data.index ?? 0) : 0
+    const section = typeof data.section === 'string' && order.includes(data.section) ? data.section : null
     return {
-      phase,
+      phase: phase === 'section' && !section ? 'questions' : phase,
       weights,
       answers,
-      index: Math.max(0, Math.min(questions.length - 1, index)),
+      order,
+      section,
+      index: Math.max(0, Math.min(Math.max(0, list.length - 1), index)),
     }
   } catch {
     return empty
@@ -94,23 +99,23 @@ export default function App() {
   const [weights, setWeights] = useState<Weights>(initial.weights)
   const [answers, setAnswers] = useState<Answers>(initial.answers)
   const [index, setIndex] = useState(initial.index)
+  const [order, setOrder] = useState<string[]>(initial.order)
+  const [sectionId, setSectionId] = useState<string | null>(initial.section)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [locale, setLocaleState] = useState<Locale>(loadLocale)
   const t = ui[locale]
   const theme = useTheme()
   const headingRef = useRef<HTMLHeadingElement>(null)
-  const timer = useRef<number>(0)
   const result = useMemo(() => simulate(answers, weights, locale), [answers, weights, locale])
+  const list = useMemo(() => questionsInOrder(order), [order])
   const shareKey = parties.map((party) => result.seats[party.id]).join('.')
   const copied = copiedKey === shareKey
 
   useEffect(() => {
-    const save: Save = { phase, weights, answers, index }
+    const save: Save = { phase, weights, answers, index, order, section: sectionId }
     localStorage.setItem(STORAGE, JSON.stringify(save))
-  }, [phase, weights, answers, index])
-
-  useEffect(() => () => window.clearTimeout(timer.current), [])
+  }, [phase, weights, answers, index, order, sectionId])
 
   useEffect(() => {
     if (!copied) return
@@ -121,7 +126,7 @@ export default function App() {
   useEffect(() => {
     if (phase === 'questions') headingRef.current?.focus()
     window.scrollTo(0, 0)
-  }, [phase, index])
+  }, [phase, index, sectionId])
 
   useEffect(() => {
     document.documentElement.lang = locale
@@ -134,71 +139,60 @@ export default function App() {
     saveLocale(next)
   }
 
-  const answered = questions.filter((question) => question.id in answers).length
+  const answered = list.filter((question) => question.id in answers).length
+  const playable = themeOrder(weights)
 
   function go(next: Phase) {
-    window.clearTimeout(timer.current)
     if (next !== 'results') setActiveId(null)
     setPhase(next)
+  }
+
+  function begin() {
+    const next = themeOrder(weights)
+    if (!next.length) return
+    setOrder(next)
+    setIndex(0)
+    setSectionId(null)
+    go('questions')
   }
 
   function reset() {
     setAnswers({})
     setWeights(defaultWeights())
     setIndex(0)
+    setOrder(themeOrder(defaultWeights()))
+    setSectionId(null)
     setActiveId(null)
     go('intro')
   }
 
   const backQuestion = useCallback(() => {
-    window.clearTimeout(timer.current)
     if (index === 0) setPhase('weights')
     else setIndex((current) => current - 1)
   }, [index])
 
-  const pick = useCallback((value: number | null) => {
-    const question = questions[index]
+  const commit = useCallback((value: number | null) => {
+    const question = list[index]
+    if (!question) return
     setAnswers((current) => ({ ...current, [question.id]: value }))
-    window.clearTimeout(timer.current)
-    const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180
-    timer.current = window.setTimeout(() => {
-      if (index >= questions.length - 1) {
-        setActiveId(null)
-        setPhase('results')
-      } else setIndex((current) => current + 1)
-    }, delay)
-  }, [index])
-
-  useEffect(() => {
-    if (phase !== 'questions') return
-    function onKey(event: KeyboardEvent) {
-      if (event.repeat || event.defaultPrevented) return
-      if (document.querySelector('[role="dialog"]')) return
-      const target = event.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
-      const choice = choices.find((item) => item.key === event.key)
-      if (choice) {
-        event.preventDefault()
-        pick(choice.value)
-      } else if (event.key === '0' || event.key === 'Escape') {
-        event.preventDefault()
-        pick(null)
-      } else if (event.key === 'Backspace') {
-        event.preventDefault()
-        backQuestion()
-      }
-    }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [phase, pick, backQuestion])
+    const upcoming = list[index + 1]
+    if (!upcoming || upcoming.theme !== question.theme) {
+      setSectionId(question.theme)
+      setActiveId(null)
+      setPhase('section')
+    } else setIndex((current) => current + 1)
+  }, [index, list])
 
   return (
     <I18nContext.Provider value={{ locale, setLocale, t }}>
     <div className="min-h-svh">
       <header className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
-        <button type="button" className="text-start" onClick={() => go('intro')}>
-          <span className="block text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">{t.brandKicker}</span>
-          <span className="font-heading text-lg leading-none">{t.brand}</span>
+        <button type="button" className="flex items-center gap-2 text-start" onClick={() => go('intro')}>
+          <i className="brand-mark" aria-hidden="true" />
+          <span>
+            <span className="block text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">{t.brandKicker}</span>
+            <span className="font-heading text-lg leading-none">{t.brand}</span>
+          </span>
         </button>
         <div className="flex items-center gap-2">
           <div className="flex rounded-lg border p-0.5" role="group" aria-label={t.language}>
@@ -221,27 +215,58 @@ export default function App() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-5xl px-4 pb-20 sm:px-6">
-        {phase === 'intro' && <Intro onStart={() => go('weights')} onSkip={() => { setIndex(0); go('questions') }} />}
+        {phase === 'intro' && <Intro onStart={() => go('weights')} onSkip={begin} />}
         {phase === 'weights' && (
           <Weights
             weights={weights}
+            canStart={playable.length > 0}
             onChange={(themeId, level) => setWeights((current) => ({ ...current, [themeId]: level }))}
-            onNext={() => { setIndex(0); go('questions') }}
+            onNext={begin}
           />
         )}
         {phase === 'questions' && (
-          <Question
+          <QuizScreen
             index={index}
+            list={list}
+            order={order}
+            weights={weights}
             answers={answers}
-            result={result}
             headingRef={headingRef}
-            onPick={pick}
+            onAnswer={commit}
             onBack={backQuestion}
+          />
+        )}
+        {phase === 'section' && sectionId && (
+          <SectionView
+            order={order}
+            sectionId={sectionId}
+            answers={answers}
+            weights={weights}
+            onBack={() => {
+              const span = sectionSpan(order, sectionId)
+              if (span) setIndex(span.end)
+              go('questions')
+            }}
+            onNext={() => {
+              const pos = order.indexOf(sectionId)
+              const nextTheme = order[pos + 1]
+              if (!nextTheme) {
+                setActiveId(null)
+                go('results')
+                return
+              }
+              const span = sectionSpan(order, nextTheme)
+              setIndex(span?.start ?? 0)
+              setSectionId(null)
+              go('questions')
+            }}
           />
         )}
         {phase === 'results' && (
           <Results
             result={result}
+            answers={answers}
+            weights={weights}
             answered={answered}
             activeId={activeId}
             onActive={setActiveId}
@@ -256,7 +281,7 @@ export default function App() {
                 setCopiedKey(null)
               }
             }}
-            onEdit={() => { setIndex(questions.length - 1); go('questions') }}
+            onEdit={() => { setIndex(Math.max(0, list.length - 1)); go('questions') }}
             onReset={reset}
           />
         )}
@@ -295,7 +320,7 @@ function Intro({ onStart, onSkip }: { onStart: () => void; onSkip: () => void })
       <div>
         <p className="text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">{t.date}</p>
         <h1 className="font-heading mt-3 text-4xl leading-[1.05] font-semibold sm:text-5xl">{t.introTitle}</h1>
-        <p className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">{t.introLead}</p>
+        <p className="mt-4 max-w-xl text-base leading-relaxed text-muted-foreground">{t.introLead(questions.length)}</p>
         <dl className="mt-6 grid grid-cols-3 gap-2">
           {[
             ['120', t.seatsShort],
@@ -322,12 +347,51 @@ function Intro({ onStart, onSkip }: { onStart: () => void; onSkip: () => void })
   )
 }
 
+function SectionView({
+  order,
+  sectionId,
+  answers,
+  weights,
+  onBack,
+  onNext,
+}: {
+  order: string[]
+  sectionId: string
+  answers: Answers
+  weights: Weights
+  onBack: () => void
+  onNext: () => void
+}) {
+  const { t, locale } = useI18n()
+  const pos = Math.max(0, order.indexOf(sectionId))
+  const done = order.slice(0, pos + 1)
+  const prev = simulate(answers, weights, locale, done.slice(0, -1)).seats
+  const now = simulate(answers, weights, locale, done).seats
+  const awarded = seatBudget(weights, done) - seatBudget(weights, done.slice(0, -1))
+  const nextTheme = order[pos + 1]
+  return (
+    <SectionBoard
+      name={themeText(locale, sectionId).name}
+      awarded={awarded}
+      sectionIndex={pos}
+      sectionTotal={order.length}
+      prev={prev}
+      now={now}
+      nextLabel={nextTheme ? t.sectionNext(themeText(locale, nextTheme).name) : t.sectionDone}
+      onBack={onBack}
+      onNext={onNext}
+    />
+  )
+}
+
 function Weights({
   weights,
+  canStart,
   onChange,
   onNext,
 }: {
   weights: Weights
+  canStart: boolean
   onChange: (themeId: string, level: number) => void
   onNext: () => void
 }) {
@@ -347,7 +411,7 @@ function Weights({
                 <h2 className="font-medium">{copy.name}</h2>
                 <p className="text-sm text-muted-foreground">{copy.hint}</p>
               </div>
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-4" role="radiogroup" aria-label={copy.name}>
+              <div className="seg sm:min-w-[280px]" role="radiogroup" aria-label={copy.name}>
                 {weightLevels.map((level) => {
                   const on = weights[item.id] === level.id
                   return (
@@ -357,7 +421,6 @@ function Weights({
                       role="radio"
                       aria-checked={on}
                       onClick={() => onChange(item.id, level.id)}
-                      className={`h-9 rounded-lg px-2 text-xs font-medium ${on ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground'}`}
                     >
                       {t.weights[level.id]}
                     </button>
@@ -369,92 +432,15 @@ function Weights({
           )
         })}
       </div>
-      <Button type="button" className="mt-6 h-11 px-5" onClick={onNext}>{t.toQuestions}</Button>
-    </div>
-  )
-}
-
-function Question({
-  index,
-  answers,
-  result,
-  headingRef,
-  onPick,
-  onBack,
-}: {
-  index: number
-  answers: Answers
-  result: SeatResult
-  headingRef: RefObject<HTMLHeadingElement | null>
-  onPick: (value: number | null) => void
-  onBack: () => void
-}) {
-  const { t, locale } = useI18n()
-  const question = questions[index]
-  const copy = questionText(locale, question.id)
-  const theme = themeText(locale, question.theme)
-  const current = question.id in answers ? answers[question.id] : undefined
-  const started = Object.keys(answers).length > 0
-  return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-4 flex items-center justify-between gap-3 text-sm text-muted-foreground">
-        <span>{theme.name}</span>
-        <span>{t.questionOf(index + 1, questions.length)}</span>
-      </div>
-      <div className="mb-5 h-1 overflow-hidden rounded-full bg-muted">
-        <div className="h-full bg-primary" style={{ width: `${(index / questions.length) * 100}%` }} />
-      </div>
-      <h1 ref={headingRef} tabIndex={-1} className="font-heading text-3xl font-semibold outline-none sm:text-4xl">{copy.title}</h1>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <Pole text={copy.a} hot={typeof current === 'number' && current < 0} label={t.option(t.marks[0])} />
-        <Pole text={copy.b} hot={typeof current === 'number' && current > 0} label={t.option(t.marks[1])} />
-      </div>
-      <div className="mt-4 grid grid-cols-5 gap-1.5" role="radiogroup" aria-label={t.answerLabel}>
-        {choices.map((choice, choiceIndex) => {
-          const on = current === choice.value
-          const name = t.choices[choiceIndex]
-          return (
-            <button
-              key={choice.key}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              aria-label={`${choice.key} ${name}`}
-              onClick={() => onPick(choice.value)}
-              className={`min-h-16 rounded-xl border px-1 text-center text-xs leading-tight font-medium sm:text-sm ${on ? 'border-primary bg-primary text-primary-foreground' : 'bg-card'}`}
-            >
-              <span className="block text-[10px] opacity-70">{choice.key}</span>
-              {name}
-            </button>
-          )
-        })}
-      </div>
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <Button type="button" variant="ghost" onClick={onBack}>{t.back}</Button>
-        <Button type="button" variant="outline" onClick={() => onPick(null)}>{t.skip}</Button>
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">{t.keysHint}</p>
-      {started && (
-        <div className="mt-8">
-          <p className="mb-2 text-sm text-muted-foreground">{t.draft}</p>
-          <StackedBar seats={result.seats} />
-        </div>
-      )}
-    </div>
-  )
-}
-
-function Pole({ text, hot, label }: { text: string; hot: boolean; label: string }) {
-  return (
-    <div className={`rounded-xl border bg-card p-4 ${hot ? 'ring-2 ring-primary' : ''}`}>
-      <span className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">{label}</span>
-      <p className="mt-1 leading-snug">{text}</p>
+      <button type="button" className="cta mt-6" disabled={!canStart} onClick={onNext}>{t.toQuestions}</button>
     </div>
   )
 }
 
 function Results({
   result,
+  answers,
+  weights,
   answered,
   activeId,
   onActive,
@@ -464,6 +450,8 @@ function Results({
   onReset,
 }: {
   result: SeatResult
+  answers: Answers
+  weights: Weights
   answered: number
   activeId: string | null
   onActive: (id: string | null) => void
@@ -529,6 +517,8 @@ function Results({
         </ul>
       </div>
 
+      <div className="mt-10"><WikiCard result={result} /></div>
+
       <section className="mt-10">
         <h2 className="font-heading text-2xl font-semibold">{t.whoBuilds}</h2>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -593,6 +583,9 @@ function Results({
         </section>
       )}
 
+      <div className="mt-10"><BillList seats={result.seats} /></div>
+      <div className="mt-10"><ThemeShareList answers={answers} weights={weights} /></div>
+
       <section className="mt-10 rounded-2xl border bg-card p-5">
         <h2 className="font-heading text-2xl font-semibold">{result.outlookTitle}</h2>
         <p className="mt-2 max-w-3xl leading-relaxed">{result.outlookText}</p>
@@ -626,6 +619,8 @@ function Results({
           </table>
         </div>
       </section>
+
+      <div className="mt-10"><ThemeStrips answers={answers} /></div>
 
       <section className="mt-10">
         <h2 className="font-heading text-2xl font-semibold">{t.whereTitle}</h2>
